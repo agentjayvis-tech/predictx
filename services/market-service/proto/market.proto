@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package market.v1;
+
+option go_package = "github.com/predictx/market-service/internal/api/grpc/marketpb";
+
+service MarketService {
+    // GetMarket retrieves a single market by ID.
+    rpc GetMarket (GetMarketRequest) returns (MarketResponse);
+
+    // ListResolvableMarkets streams active markets past their close time.
+    // Server-streaming so clients process rows as they arrive.
+    rpc ListResolvableMarkets (Empty) returns (stream MarketResponse);
+
+    // ListMarkets streams markets with optional filters.
+    rpc ListMarkets (ListMarketsRequest) returns (stream MarketResponse);
+
+    // UpdateMarketStatus transitions a market to a new status.
+    rpc UpdateMarketStatus (UpdateStatusRequest) returns (MarketResponse);
+}
+
+message Empty {}
+
+message GetMarketRequest {
+    string market_id = 1;
+}
+
+message ListMarketsRequest {
+    string status   = 1;
+    string category = 2;
+    int32  limit    = 3;
+    int32  offset   = 4;
+}
+
+message UpdateStatusRequest {
+    string market_id  = 1;
+    string new_status = 2;
+}
+
+message MarketResponse {
+    string market_id            = 1;
+    string title                = 2;
+    string question             = 3;
+    string resolution_criteria  = 4;
+    string category             = 5;
+    string status               = 6;
+    int64  pool_amount_minor    = 7;
+    string currency             = 8;
+    string closes_at            = 9;  // ISO 8601
+    string created_at           = 10; // ISO 8601
+    string updated_at           = 11; // ISO 8601
+}
