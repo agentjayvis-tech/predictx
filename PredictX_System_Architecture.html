@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PredictX — System Architecture</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #0a0a0f; color: #e0e0e8; overflow-x: hidden; }
+
+  .header { text-align: center; padding: 48px 24px 32px; background: linear-gradient(135deg, #0d0d1a 0%, #1a0d2e 50%, #0d1a2e 100%); border-bottom: 1px solid rgba(139,92,246,0.2); }
+  .header h1 { font-size: 36px; font-weight: 700; background: linear-gradient(135deg, #a78bfa, #60a5fa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
+  .header p { color: #8888aa; font-size: 15px; }
+  .header .version { display: inline-block; background: rgba(139,92,246,0.15); color: #a78bfa; padding: 4px 14px; border-radius: 20px; font-size: 12px; margin-top: 12px; border: 1px solid rgba(139,92,246,0.25); }
+
+  .tabs { display: flex; justify-content: center; gap: 4px; padding: 16px 24px; background: #0d0d14; position: sticky; top: 0; z-index: 100; border-bottom: 1px solid #1a1a2e; flex-wrap: wrap; }
+  .tab { padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; color: #8888aa; background: transparent; border: 1px solid transparent; transition: all .2s; }
+  .tab:hover { color: #c0c0d0; background: rgba(255,255,255,0.03); }
+  .tab.active { color: #a78bfa; background: rgba(139,92,246,0.1); border-color: rgba(139,92,246,0.3); }
+
+  .content { max-width: 1280px; margin: 0 auto; padding: 32px 24px; }
+  .section { display: none; }
+  .section.active { display: block; }
+
+  .diagram-container { background: #0d0d18; border: 1px solid #1a1a30; border-radius: 16px; padding: 32px; margin-bottom: 32px; overflow-x: auto; }
+
+  /* Architecture boxes */
+  .arch-grid { display: grid; gap: 16px; }
+  .arch-row { display: flex; gap: 16px; align-items: stretch; flex-wrap: wrap; }
+  .arch-box { flex: 1; min-width: 200px; border-radius: 12px; padding: 20px; border: 1px solid; position: relative; transition: transform .2s, box-shadow .2s; cursor: default; }
+  .arch-box:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+  .arch-box h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .arch-box p { font-size: 12px; opacity: 0.7; line-height: 1.5; }
+  .arch-box .tech { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+  .arch-box .tech span { font-size: 10px; padding: 3px 8px; border-radius: 4px; font-weight: 500; }
+
+  /* Color themes */
+  .box-purple { background: rgba(139,92,246,0.06); border-color: rgba(139,92,246,0.25); }
+  .box-purple h3 { color: #a78bfa; }
+  .box-purple .tech span { background: rgba(139,92,246,0.15); color: #c4b5fd; }
+
+  .box-blue { background: rgba(59,130,246,0.06); border-color: rgba(59,130,246,0.25); }
+  .box-blue h3 { color: #60a5fa; }
+  .box-blue .tech span { background: rgba(59,130,246,0.15); color: #93c5fd; }
+
+  .box-green { background: rgba(34,197,94,0.06); border-color: rgba(34,197,94,0.25); }
+  .box-green h3 { color: #4ade80; }
+  .box-green .tech span { background: rgba(34,197,94,0.15); color: #86efac; }
+
+  .box-amber { background: rgba(245,158,11,0.06); border-color: rgba(245,158,11,0.25); }
+  .box-amber h3 { color: #fbbf24; }
+  .box-amber .tech span { background: rgba(245,158,11,0.15); color: #fcd34d; }
+
+  .box-red { background: rgba(239,68,68,0.06); border-color: rgba(239,68,68,0.25); }
+  .box-red h3 { color: #f87171; }
+  .box-red .tech span { background: rgba(239,68,68,0.15); color: #fca5a5; }
+
+  .box-teal { background: rgba(20,184,166,0.06); border-color: rgba(20,184,166,0.25); }
+  .box-teal h3 { color: #2dd4bf; }
+  .box-teal .tech span { background: rgba(20,184,166,0.15); color: #5eead4; }
+
+  .box-pink { background: rgba(236,72,153,0.06); border-color: rgba(236,72,153,0.25); }
+  .box-pink h3 { color: #f472b6; }
+  .box-pink .tech span { background: rgba(236,72,153,0.15); color: #f9a8d4; }
+
+  .layer-label { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #555570; font-weight: 600; margin: 24px 0 12px; padding-left: 4px; }
+
+  .arrow-down { text-align: center; padding: 8px; color: #333350; font-size: 20px; }
+
+  /* Writeup sections */
+  .writeup { max-width: 900px; }
+  .writeup h2 { font-size: 22px; font-weight: 600; margin: 32px 0 16px; padding-bottom: 8px; border-bottom: 1px solid #1a1a30; }
+  .writeup h2:first-child { margin-top: 0; }
+  .writeup h3 { font-size: 16px; font-weight: 600; color: #a78bfa; margin: 20px 0 8px; }
+  .writeup p { font-size: 14px; line-height: 1.75; color: #b0b0c0; margin-bottom: 12px; }
+  .writeup ul { list-style: none; padding-left: 0; margin-bottom: 16px; }
+  .writeup ul li { font-size: 13px; line-height: 1.7; color: #9999b0; padding: 4px 0 4px 20px; position: relative; }
+  .writeup ul li::before { content: '→'; position: absolute; left: 0; color: #a78bfa; }
+
+  .tech-table { width: 100%; border-collapse: collapse; margin: 16px 0 24px; font-size: 13px; }
+  .tech-table th { text-align: left; padding: 10px 14px; background: rgba(139,92,246,0.08); color: #a78bfa; font-weight: 600; border-bottom: 1px solid #1a1a30; }
+  .tech-table td { padding: 10px 14px; border-bottom: 1px solid #111122; color: #9999b0; vertical-align: top; }
+  .tech-table tr:hover td { background: rgba(255,255,255,0.015); }
+
+  .flow-step { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 12px; }
+  .flow-num { min-width: 28px; height: 28px; border-radius: 50%; background: rgba(139,92,246,0.15); color: #a78bfa; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; border: 1px solid rgba(139,92,246,0.3); }
+  .flow-text { font-size: 13px; color: #9999b0; line-height: 1.6; padding-top: 3px; }
+  .flow-text strong { color: #c0c0d8; }
+
+  .callout { background: rgba(139,92,246,0.05); border: 1px solid rgba(139,92,246,0.15); border-radius: 10px; padding: 16px 20px; margin: 16px 0; }
+  .callout-title { font-size: 13px; font-weight: 600; color: #a78bfa; margin-bottom: 6px; }
+  .callout p { font-size: 12px; margin-bottom: 0; }
+
+  @media (max-width: 768px) {
+    .arch-row { flex-direction: column; }
+    .arch-box { min-width: unset; }
+    .tabs { gap: 2px; }
+    .tab { padding: 8px 12px; font-size: 11px; }
+    .header h1 { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>PredictX — System Architecture</h1>
+  <p>Mobile-native social prediction platform for emerging markets</p>
+  <div class="version">v1.0 · March 2026 · Architecture Blueprint</div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="showSection('overview')">Overview</div>
+  <div class="tab" onclick="showSection('clients')">Client Layer</div>
+  <div class="tab" onclick="showSection('api')">API Gateway</div>
+  <div class="tab" onclick="showSection('services')">Core Services</div>
+  <div class="tab" onclick="showSection('matching')">Matching Engine</div>
+  <div class="tab" onclick="showSection('ai')">AI & Agents</div>
+  <div class="tab" onclick="showSection('data')">Data Layer</div>
+  <div class="tab" onclick="showSection('infra')">Infrastructure</div>
+  <div class="tab" onclick="showSection('flows')">System Flows</div>
+</div>
+
+<div class="content">
+
+<!-- ==================== OVERVIEW ==================== -->
+<div class="section active" id="overview">
+  <div class="diagram-container">
+    <div class="layer-label">Client Layer — User Touchpoints</div>
+    <div class="arch-row">
+      <div class="arch-box box-purple">
+        <h3>React Native Mobile App</h3>
+        <p>iOS + Android. Snap-style feed, swipe-to-bet, dark theme, offline-capable.</p>
+        <div class="tech"><span>React Native 0.76</span><span>TypeScript</span><span>Reanimated 3</span></div>
+      </div>
+      <div class="arch-box box-purple">
+        <h3>WhatsApp / Telegram Bot</h3>
+        <p>Chat-native predictions. Natural language queries. Group prediction mechanic.</p>
+        <div class="tech"><span>Node.js</span><span>WhatsApp Business API</span><span>Telegram Bot API</span></div>
+      </div>
+      <div class="arch-box box-purple">
+        <h3>Progressive Web App</h3>
+        <p>Lightweight web access. No-install fallback. Share link landing pages.</p>
+        <div class="tech"><span>Next.js 15</span><span>React</span><span>Service Workers</span></div>
+      </div>
+    </div>
+
+    <div class="arrow-down">▼ ▼ ▼</div>
+    <div class="layer-label">Edge & API Gateway</div>
+    <div class="arch-row">
+      <div class="arch-box box-blue">
+        <h3>CDN & Edge Network</h3>
+        <p>Global PoPs in Lagos, Nairobi, Manila, Mumbai. DDoS protection. Asset caching.</p>
+        <div class="tech"><span>CloudFlare</span><span>Edge Workers</span><span>WAF</span></div>
+      </div>
+      <div class="arch-box box-blue">
+        <h3>API Gateway</h3>
+        <p>Rate limiting, auth, request routing, API versioning. GraphQL + REST.</p>
+        <div class="tech"><span>Kong Gateway</span><span>GraphQL Yoga</span><span>gRPC</span></div>
+      </div>
+      <div class="arch-box box-blue">
+        <h3>WebSocket Gateway</h3>
+        <p>Real-time odds, live feed, chat, notifications. Millions of concurrent connections.</p>
+        <div class="tech"><span>Elixir/Phoenix</span><span>Socket.io</span><span>Redis Pub/Sub</span></div>
+      </div>
+    </div>
+
+    <div class="arrow-down">▼ ▼ ▼</div>
+    <div class="layer-label">Core Microservices</div>
+    <div class="arch-row">
+      <div class="arch-box box-green">
+        <h3>Auth & Identity</h3>
+        <p>Phone OTP, social login, JWT, tiered KYC, geofencing.</p>
+        <div class="tech"><span>Go</span><span>Twilio</span><span>Sumsub KYC</span></div>
+      </div>
+      <div class="arch-box box-green">
+        <h3>Market Service</h3>
+        <p>Market CRUD, categories, resolution, lifecycle management.</p>
+        <div class="tech"><span>Go</span><span>PostgreSQL</span><span>gRPC</span></div>
+      </div>
+      <div class="arch-box box-green">
+        <h3>Wallet & Payments</h3>
+        <p>Virtual + real wallets. Multi-currency. Paystack, M-Pesa, GCash, crypto.</p>
+        <div class="tech"><span>Go</span><span>Paystack</span><span>Safaricom API</span></div>
+      </div>
+      <div class="arch-box box-green">
+        <h3>Social & Tribes</h3>
+        <p>Profiles, feed, challenges, groups, WhatsApp sharing, activity streams.</p>
+        <div class="tech"><span>Node.js/TS</span><span>Neo4j</span><span>Redis Streams</span></div>
+      </div>
+    </div>
+    <div class="arch-row" style="margin-top:12px;">
+      <div class="arch-box box-green">
+        <h3>Gamification Engine</h3>
+        <p>Streaks, XP, badges, leaderboards, daily rewards, seasonal rankings.</p>
+        <div class="tech"><span>Go</span><span>Redis Sorted Sets</span><span>Cron</span></div>
+      </div>
+      <div class="arch-box box-green">
+        <h3>Notification Service</h3>
+        <p>Push, in-app, SMS, contextual triggers. Smart frequency capping.</p>
+        <div class="tech"><span>Node.js</span><span>FCM</span><span>APNs</span><span>Kafka</span></div>
+      </div>
+      <div class="arch-box box-green">
+        <h3>Content & Localization</h3>
+        <p>i18n, market curation, local content pipelines. 7+ languages.</p>
+        <div class="tech"><span>Node.js</span><span>Crowdin</span><span>PostgreSQL</span></div>
+      </div>
+    </div>
+
+    <div class="arrow-down">▼ ▼ ▼</div>
+    <div class="layer-label">High-Performance Engine</div>
+    <div class="arch-row">
+      <div class="arch-box box-red">
+        <h3>Matching Engine (Rust)</h3>
+        <p>CLOB + AMM hybrid. Sub-10ms order matching. 10K+ orders/sec. In-memory order book.</p>
+        <div class="tech"><span>Rust</span><span>Tokio</span><span>FlatBuffers</span><span>LMAX Pattern</span></div>
+      </div>
+      <div class="arch-box box-red">
+        <h3>Risk & Settlement</h3>
+        <p>Position management, P&L, market settlement, payout distribution, fraud detection.</p>
+        <div class="tech"><span>Rust</span><span>PostgreSQL</span><span>Event Sourcing</span></div>
+      </div>
+    </div>
+
+    <div class="arrow-down">▼ ▼ ▼</div>
+    <div class="layer-label">AI & Intelligence Layer</div>
+    <div class="arch-row">
+      <div class="arch-box box-amber">
+        <h3>AI Recommendation Engine</h3>
+        <p>Personalized market recommendations, trending detection, feed ranking algorithm.</p>
+        <div class="tech"><span>Python</span><span>PyTorch</span><span>Feature Store</span></div>
+      </div>
+      <div class="arch-box box-amber">
+        <h3>Market Resolution Agent</h3>
+        <p>Auto-resolution via API data feeds. AI validation. Human-in-loop appeals.</p>
+        <div class="tech"><span>Python</span><span>Claude API</span><span>Celery</span></div>
+      </div>
+      <div class="arch-box box-amber">
+        <h3>Event Hijacking Engine</h3>
+        <p>Real-time trend monitoring. Auto-market creation in &lt;2hrs. Content generation.</p>
+        <div class="tech"><span>Python</span><span>Apache Flink</span><span>Twitter/X API</span></div>
+      </div>
+      <div class="arch-box box-amber">
+        <h3>WhatsApp NLU Engine</h3>
+        <p>Natural language understanding for chat predictions. Multi-language intent parsing.</p>
+        <div class="tech"><span>Python</span><span>Claude API</span><span>spaCy</span></div>
+      </div>
+    </div>
+
+    <div class="arrow-down">▼ ▼ ▼</div>
+    <div class="layer-label">Data & Storage Layer</div>
+    <div class="arch-row">
+      <div class="arch-box box-teal">
+        <h3>Primary Database</h3>
+        <p>Users, markets, orders, transactions. ACID compliant. Multi-AZ replicas.</p>
+        <div class="tech"><span>PostgreSQL 16</span><span>Citus (sharding)</span><span>pgBouncer</span></div>
+      </div>
+      <div class="arch-box box-teal">
+        <h3>Cache & Real-time</h3>
+        <p>Session, odds, leaderboards, rate limiting, pub/sub for WebSocket fan-out.</p>
+        <div class="tech"><span>Redis Cluster 7</span><span>KeyDB</span></div>
+      </div>
+      <div class="arch-box box-teal">
+        <h3>Search & Analytics</h3>
+        <p>Market search, full-text, analytics aggregation, dashboards.</p>
+        <div class="tech"><span>Elasticsearch</span><span>ClickHouse</span><span>Grafana</span></div>
+      </div>
+      <div class="arch-box box-teal">
+        <h3>Event Bus & Streams</h3>
+        <p>Event sourcing, service communication, audit log, replay capability.</p>
+        <div class="tech"><span>Apache Kafka</span><span>Schema Registry</span><span>KSQL</span></div>
+      </div>
+    </div>
+
+    <div class="arrow-down">▼ ▼ ▼</div>
+    <div class="layer-label">Infrastructure & DevOps</div>
+    <div class="arch-row">
+      <div class="arch-box box-pink">
+        <h3>Cloud & Orchestration</h3>
+        <p>Multi-region (Mumbai, Lagos, Frankfurt). Auto-scaling. 99.9% SLA.</p>
+        <div class="tech"><span>AWS EKS</span><span>Kubernetes</span><span>Terraform</span><span>Helm</span></div>
+      </div>
+      <div class="arch-box box-pink">
+        <h3>CI/CD Pipeline</h3>
+        <p>Automated build, test, deploy. Canary + blue/green. Feature flags.</p>
+        <div class="tech"><span>GitHub Actions</span><span>ArgoCD</span><span>LaunchDarkly</span></div>
+      </div>
+      <div class="arch-box box-pink">
+        <h3>Observability</h3>
+        <p>Distributed tracing, metrics, logs, alerting, SLO monitoring.</p>
+        <div class="tech"><span>Datadog</span><span>OpenTelemetry</span><span>PagerDuty</span></div>
+      </div>
+      <div class="arch-box box-pink">
+        <h3>Security & Compliance</h3>
+        <p>Vault for secrets. SOC 2 compliance. GDPR. Penetration testing.</p>
+        <div class="tech"><span>HashiCorp Vault</span><span>AWS KMS</span><span>Snyk</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== CLIENTS ==================== -->
+<div class="section" id="clients">
+  <div class="writeup">
+    <h2>Client Layer — Three Entry Points</h2>
+    <p>PredictX reaches users through three distinct client interfaces, each optimized for a different engagement pattern. Together they form the hybrid UX approved in the design sprint: a Snap-style discovery feed in-app, WhatsApp as the distribution channel, and a PWA for frictionless web access.</p>
+
+    <h3>1. React Native Mobile App (Primary)</h3>
+    <p>The mobile app is the core experience — a dark-themed, Snap-style vertical feed with inline YES/NO action buttons. Built with React Native 0.76 and TypeScript for shared iOS/Android code, with Reanimated 3 powering buttery 60fps swipe animations even on $100 Tecno/Infinix phones.</p>
+    <table class="tech-table">
+      <tr><th>Component</th><th>Technology</th><th>Rationale</th></tr>
+      <tr><td>Framework</td><td>React Native 0.76 + New Architecture (Fabric)</td><td>Shared codebase, native performance, large talent pool in India</td></tr>
+      <tr><td>Language</td><td>TypeScript 5.x</td><td>Type safety, better DX, fewer runtime bugs</td></tr>
+      <tr><td>Animations</td><td>Reanimated 3 + Gesture Handler</td><td>Native thread animations — critical for swipe-to-bet at 60fps</td></tr>
+      <tr><td>State Management</td><td>Zustand + React Query (TanStack)</td><td>Lightweight global state + server state caching with offline support</td></tr>
+      <tr><td>Navigation</td><td>React Navigation 7</td><td>Native stack transitions, deep link support for WhatsApp cards</td></tr>
+      <tr><td>Real-time</td><td>Socket.io client</td><td>Live odds, chat, feed updates via persistent WebSocket</td></tr>
+      <tr><td>Storage</td><td>WatermelonDB (SQLite)</td><td>Offline-first local DB — cache markets, queue bets on spotty 3G</td></tr>
+      <tr><td>Push</td><td>Firebase Cloud Messaging + Notifee</td><td>Actionable notifications with inline YES/NO buttons on Android</td></tr>
+      <tr><td>i18n</td><td>react-i18next + Crowdin OTA</td><td>7+ languages with over-the-air translation updates, no app release needed</td></tr>
+      <tr><td>APK Size</td><td>Target &lt; 12MB (Hermes + ProGuard)</td><td>Critical for $100 phones with 16-32GB storage</td></tr>
+    </table>
+
+    <h3>2. WhatsApp / Telegram Bot (Distribution Channel)</h3>
+    <p>The chat bot is PredictX's primary growth engine. Users interact via natural language inside WhatsApp and Telegram — the apps they already use 20+ times per day. The bot handles 80% of casual prediction activity without users ever opening the PredictX app.</p>
+    <table class="tech-table">
+      <tr><th>Component</th><th>Technology</th><th>Rationale</th></tr>
+      <tr><td>WhatsApp Integration</td><td>WhatsApp Business Cloud API (via Meta)</td><td>Official API, rich media templates, interactive buttons</td></tr>
+      <tr><td>Telegram Integration</td><td>Telegram Bot API + Inline Mode</td><td>Group bots, inline queries, instant view for market details</td></tr>
+      <tr><td>Bot Runtime</td><td>Node.js + Fastify</td><td>Event-driven, handles high-concurrency webhook payloads</td></tr>
+      <tr><td>NLU Pipeline</td><td>Claude API (Haiku for speed) + spaCy</td><td>Intent classification + entity extraction in Pidgin, Hindi, Swahili, Tagalog</td></tr>
+      <tr><td>Session State</td><td>Redis</td><td>Conversation context with 30-min TTL per user</td></tr>
+      <tr><td>Deep Linking</td><td>Custom URL scheme + Universal Links</td><td>Seamless bot → app transition preserving context</td></tr>
+    </table>
+
+    <h3>3. Progressive Web App (Fallback)</h3>
+    <p>A lightweight Next.js PWA serves two purposes: it's the landing page for WhatsApp share cards (no app install required to view a market), and it provides a full-featured web experience for users who can't or won't install the app.</p>
+    <table class="tech-table">
+      <tr><th>Component</th><th>Technology</th><th>Rationale</th></tr>
+      <tr><td>Framework</td><td>Next.js 15 (App Router)</td><td>SSR for SEO, RSC for performance, ISR for market pages</td></tr>
+      <tr><td>Styling</td><td>Tailwind CSS 4</td><td>Utility-first, small bundle, dark theme system</td></tr>
+      <tr><td>Offline</td><td>Service Workers + Workbox</td><td>Cache-first for returning users on bad connections</td></tr>
+      <tr><td>Target</td><td>&lt; 100KB initial JS bundle</td><td>First meaningful paint in &lt; 2s on 3G</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ==================== API GATEWAY ==================== -->
+<div class="section" id="api">
+  <div class="writeup">
+    <h2>Edge & API Gateway Layer</h2>
+    <p>The gateway layer sits between users and backend services. It handles authentication, rate limiting, request routing, and real-time WebSocket connections at scale. Designed to serve millions of concurrent users across Africa, South Asia, Southeast Asia, and Europe.</p>
+
+    <h3>CloudFlare Edge Network</h3>
+    <p>CloudFlare provides the global CDN with edge PoPs close to every target market. Edge Workers run lightweight logic (geofencing checks, A/B routing, static response caching) at the edge, reducing round-trip latency from 200ms+ to under 50ms for cached responses.</p>
+    <ul>
+      <li><strong>DDoS Protection:</strong> Enterprise-tier DDoS mitigation — critical for a betting platform that attracts attacks</li>
+      <li><strong>WAF Rules:</strong> Custom rules blocking known bot patterns, credential stuffing, and API abuse</li>
+      <li><strong>Image Optimization:</strong> Auto-resize and compress market card images for low-bandwidth users</li>
+      <li><strong>Edge Caching:</strong> Market listings, leaderboards, and static content cached at 300+ global PoPs</li>
+    </ul>
+
+    <h3>API Gateway — Kong</h3>
+    <p>Kong Gateway handles all API traffic with plugins for authentication, rate limiting, request transformation, and observability. It routes requests to the appropriate microservice via service discovery.</p>
+    <table class="tech-table">
+      <tr><th>Capability</th><th>Implementation</th><th>Detail</th></tr>
+      <tr><td>Auth</td><td>JWT validation + API key management</td><td>Verify tokens, inject user context, block expired sessions</td></tr>
+      <tr><td>Rate Limiting</td><td>Redis-backed sliding window</td><td>1000 req/min per user, 100 req/min for unauthenticated</td></tr>
+      <tr><td>API Versioning</td><td>URI path-based (/v1/, /v2/)</td><td>Backward-compatible upgrades, deprecation headers</td></tr>
+      <tr><td>Request Routing</td><td>Service mesh integration</td><td>Route to correct microservice with health checks and circuit breaking</td></tr>
+      <tr><td>GraphQL</td><td>GraphQL Yoga (federation)</td><td>Single endpoint for mobile — reduces round trips vs REST</td></tr>
+      <tr><td>gRPC</td><td>Internal service-to-service</td><td>Protobuf-serialized, high-throughput inter-service calls</td></tr>
+    </table>
+
+    <h3>WebSocket Gateway — Elixir/Phoenix</h3>
+    <p>Real-time is non-negotiable for a prediction platform. The WebSocket gateway, built on Elixir/Phoenix Channels, handles millions of concurrent persistent connections for live odds, chat, feed updates, and notification streaming. Elixir's BEAM VM is purpose-built for this — each connection is a lightweight process consuming ~2KB of memory.</p>
+    <ul>
+      <li><strong>Live Odds:</strong> Odds changes broadcast to all subscribers of a market within 50ms</li>
+      <li><strong>Market Chat:</strong> 500+ concurrent users per market room, message fan-out via Redis Pub/Sub</li>
+      <li><strong>Activity Feed:</strong> Friend prediction activity streamed in real-time to social feed</li>
+      <li><strong>Presence:</strong> Online/typing indicators for chat rooms and Tribe activity</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ==================== CORE SERVICES ==================== -->
+<div class="section" id="services">
+  <div class="writeup">
+    <h2>Core Microservices</h2>
+    <p>PredictX's backend is a microservices architecture, with each service owning its domain, database, and API. Services communicate asynchronously via Kafka events for loose coupling, with synchronous gRPC for latency-sensitive paths. All services are containerized and deployed to Kubernetes.</p>
+
+    <h3>Auth & Identity Service (Go)</h3>
+    <p>Handles all authentication, user identity, and compliance-related identity verification. Phone OTP is the primary auth method (no email required), with social login as a convenience layer. Tiered KYC integrates with Sumsub for document verification.</p>
+    <table class="tech-table">
+      <tr><th>Feature</th><th>Technology</th><th>Detail</th></tr>
+      <tr><td>Phone OTP</td><td>Twilio Verify</td><td>SMS delivery in 190+ countries, fallback to WhatsApp OTP</td></tr>
+      <tr><td>Social Login</td><td>Google Identity, Apple Sign-In</td><td>One-tap sign-in, auto-link to phone number</td></tr>
+      <tr><td>Token Management</td><td>JWT (RS256) + Refresh Tokens</td><td>15-min access tokens, 30-day refresh, token rotation</td></tr>
+      <tr><td>KYC Tier 1</td><td>Phone + Name (self-declared)</td><td>Allows small bets, virtual currency, basic features</td></tr>
+      <tr><td>KYC Tier 2</td><td>Sumsub (ID document + selfie + BVN)</td><td>Full real-money access, higher limits</td></tr>
+      <tr><td>Geofencing</td><td>MaxMind GeoIP + GPS + VPN detection</td><td>Country-level feature flags, block restricted jurisdictions</td></tr>
+    </table>
+
+    <h3>Market Service (Go)</h3>
+    <p>The central service managing prediction market lifecycle — from creation through trading to resolution. Each market has a category, resolution criteria, time bounds, and configurable parameters.</p>
+    <ul>
+      <li><strong>Market States:</strong> Draft → Active → Suspended → Resolving → Settled → Archived</li>
+      <li><strong>Resolution:</strong> Automated (API data feeds for sports scores, weather, stock prices) + Manual judges for subjective markets + AI validation layer</li>
+      <li><strong>Categories:</strong> Sports, Entertainment, Politics, Weather, Finance, Viral, Local — configurable per country</li>
+      <li><strong>User-Generated Markets:</strong> Users propose markets → community votes → AI validates resolution criteria → admin approves</li>
+    </ul>
+
+    <h3>Wallet & Payment Service (Go)</h3>
+    <p>Manages dual wallet system: virtual currency (free-to-play, India) and real money (Wave 1 markets). Each currency has its own ledger with double-entry bookkeeping. Payment integrations are region-specific.</p>
+    <table class="tech-table">
+      <tr><th>Region</th><th>Payment Provider</th><th>Methods</th></tr>
+      <tr><td>Nigeria</td><td>Paystack</td><td>Bank transfers, Visa/Mastercard, USSD</td></tr>
+      <tr><td>Kenya</td><td>Safaricom Daraja API</td><td>M-Pesa STK push, B2C disbursement</td></tr>
+      <tr><td>Philippines</td><td>GCash / PayMongo</td><td>GCash, GrabPay, cards</td></tr>
+      <tr><td>Global</td><td>Circle (USDC) on Base/Polygon</td><td>Wallet connect, fiat on-ramp</td></tr>
+      <tr><td>India (F2P)</td><td>None (virtual only)</td><td>Daily free credits, earn via predictions</td></tr>
+    </table>
+
+    <h3>Social & Tribes Service (Node.js/TypeScript)</h3>
+    <p>Powers all social features — profiles, activity feeds, friend connections, Tribes (persistent social groups), challenges, and WhatsApp sharing. Uses Neo4j for the social graph (friend-of-friend queries, Tribe recommendations) and Redis Streams for the real-time activity feed.</p>
+
+    <h3>Gamification Engine (Go)</h3>
+    <p>Drives daily engagement through streaks, XP, badges, levels, and leaderboards. Redis Sorted Sets power real-time leaderboards (regional + global, weekly/monthly/all-time) that update within milliseconds of each prediction. Cron jobs handle daily streak evaluation, weekly Tribe competitions, and seasonal ranking resets.</p>
+
+    <h3>Notification Service (Node.js)</h3>
+    <p>The Pulse engine — contextual, smart notifications that bring predictions to users at relevant moments. Not spam. Integrates with Firebase Cloud Messaging (Android), APNs (iOS), and SMS fallback. Kafka consumer processes notification events from all services and applies frequency capping, quiet hours, and user preference filters before delivery.</p>
+
+    <h3>Content & Localization Service (Node.js)</h3>
+    <p>Manages the i18n framework (react-i18next on client, Crowdin for translation management), local market curation per country, and content pipelines that surface culturally relevant markets. Supports English, Yoruba, Pidgin English, Swahili, Hindi, Tagalog, and Spanish at launch with a target of adding new languages in under 48 hours.</p>
+  </div>
+</div>
+
+<!-- ==================== MATCHING ENGINE ==================== -->
+<div class="section" id="matching">
+  <div class="writeup">
+    <h2>Matching Engine — The Heart of PredictX</h2>
+    <p>The matching engine is a Rust-based, high-performance order matching system that combines a Central Limit Order Book (CLOB) with an Automated Market Maker (AMM). This hybrid approach provides deep liquidity via AMM for low-volume markets while enabling tight spreads via CLOB for high-volume ones.</p>
+
+    <div class="callout">
+      <div class="callout-title">Performance Targets</div>
+      <p>Sub-10ms order matching latency · 10,000+ orders/second throughput · 99.99% uptime · Zero data loss (event-sourced)</p>
+    </div>
+
+    <h3>Why Rust?</h3>
+    <p>The matching engine is the one component where latency and correctness are existential. Rust provides memory safety without garbage collection pauses, zero-cost abstractions, and predictable sub-microsecond latencies. The LMAX Disruptor pattern (single-writer, mechanical sympathy) is implemented natively in Rust's async runtime (Tokio) for lock-free, sequential order processing.</p>
+
+    <h3>Architecture</h3>
+    <table class="tech-table">
+      <tr><th>Component</th><th>Technology</th><th>Detail</th></tr>
+      <tr><td>Core Runtime</td><td>Rust + Tokio async</td><td>Single-threaded event loop per market for deterministic ordering</td></tr>
+      <tr><td>Serialization</td><td>FlatBuffers (zero-copy)</td><td>Incoming orders deserialized without allocation — critical for latency</td></tr>
+      <tr><td>Order Book</td><td>Custom B-Tree with price-time priority</td><td>In-memory, lock-free reads, single-writer mutations</td></tr>
+      <tr><td>AMM</td><td>Logarithmic Market Scoring Rule (LMSR)</td><td>Provides baseline liquidity; AMM quotes fill when CLOB is empty</td></tr>
+      <tr><td>Event Store</td><td>Kafka + RocksDB (local WAL)</td><td>Every order and trade is event-sourced — full replay capability</td></tr>
+      <tr><td>State Snapshots</td><td>Periodic snapshots to S3</td><td>Fast recovery — replay from latest snapshot + event tail</td></tr>
+      <tr><td>Inter-service</td><td>gRPC (Tonic)</td><td>Type-safe, high-throughput communication with Go services</td></tr>
+    </table>
+
+    <h3>Order Flow</h3>
+    <div class="flow-step"><div class="flow-num">1</div><div class="flow-text">User places prediction via app, bot, or notification → <strong>API Gateway</strong> validates and routes to Order Service</div></div>
+    <div class="flow-step"><div class="flow-num">2</div><div class="flow-text"><strong>Order Service (Go)</strong> validates balance, applies risk checks, writes to Kafka order topic</div></div>
+    <div class="flow-step"><div class="flow-num">3</div><div class="flow-text"><strong>Matching Engine (Rust)</strong> consumes from Kafka, matches against CLOB → falls back to AMM if no CLOB match</div></div>
+    <div class="flow-step"><div class="flow-num">4</div><div class="flow-text">Trade event emitted to Kafka → consumed by <strong>Settlement Service</strong> (updates wallets), <strong>WebSocket Gateway</strong> (broadcasts odds), <strong>Analytics</strong> (records trade)</div></div>
+    <div class="flow-step"><div class="flow-num">5</div><div class="flow-text">User receives confirmation via WebSocket within 50ms of original request</div></div>
+
+    <h3>Risk & Settlement (Rust)</h3>
+    <p>The settlement engine runs as a separate Rust service, consuming trade events from Kafka. It manages position tracking (open positions per user per market), P&L calculations, and when a market resolves, it distributes payouts atomically using a two-phase commit with the Wallet Service's PostgreSQL database.</p>
+    <ul>
+      <li><strong>Fraud Detection:</strong> Real-time pattern detection for wash trading, collusion, and abnormal bet sizing</li>
+      <li><strong>Responsible Gambling:</strong> Enforces deposit limits ($50 default), cool-off periods, self-exclusion, and loss alerts</li>
+      <li><strong>Market Manipulation:</strong> Monitors for coordinated price movements across related markets</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ==================== AI ==================== -->
+<div class="section" id="ai">
+  <div class="writeup">
+    <h2>AI & Intelligence Layer</h2>
+    <p>AI is woven throughout PredictX — not as a bolt-on feature but as core infrastructure. Four distinct AI systems power recommendations, market resolution, trend monitoring, and natural language understanding for the chat bot.</p>
+
+    <h3>1. AI Recommendation Engine</h3>
+    <p>Personalizes the feed, suggests markets, and ranks content for each user. Combines collaborative filtering (users like you predicted X), content-based signals (user's category preferences, past predictions), and contextual features (time of day, location, live events). Runs as a Python service with a feature store backed by Redis and ClickHouse.</p>
+    <table class="tech-table">
+      <tr><th>Component</th><th>Technology</th><th>Detail</th></tr>
+      <tr><td>Model</td><td>Two-tower retrieval + cross-attention ranking</td><td>Retrieves 100 candidates, ranks top 20 for feed</td></tr>
+      <tr><td>Training</td><td>PyTorch + Ray</td><td>Nightly retraining on interaction data, A/B tested via LaunchDarkly</td></tr>
+      <tr><td>Feature Store</td><td>Feast + Redis (online) + ClickHouse (offline)</td><td>Sub-5ms feature lookup for real-time scoring</td></tr>
+      <tr><td>Serving</td><td>ONNX Runtime on Kubernetes</td><td>Model inference at ~10ms p99 latency</td></tr>
+      <tr><td>Cold Start</td><td>Interest categories from onboarding + country defaults</td><td>New users get relevant feed from first session</td></tr>
+    </table>
+
+    <h3>2. Market Resolution Agent</h3>
+    <p>Automates the resolution of prediction markets by combining structured data APIs with AI validation. Sports scores come from live data feeds (ESPN, API-Football), weather from OpenWeatherMap, financial data from market APIs. For subjective or complex markets, Claude API acts as a reasoning agent that evaluates evidence and recommends resolution, with human judges as the final arbiter.</p>
+    <ul>
+      <li><strong>Auto-Resolution Pipeline:</strong> Data feed triggers → AI validates data quality → Resolution proposed → 15-min dispute window → Settlement</li>
+      <li><strong>Appeal System:</strong> Users flag disputed resolutions → AI reviews evidence → Escalate to human panel if confidence &lt; 95%</li>
+      <li><strong>Cron Scheduling:</strong> Celery Beat checks all active markets every 60 seconds for resolution triggers</li>
+    </ul>
+
+    <h3>3. Event Hijacking Engine</h3>
+    <p>Monitors global trends in real-time and auto-creates prediction markets around viral events within 2 hours. Ingests signals from Twitter/X trending topics, Google Trends, news APIs, and sports fixtures. Apache Flink processes the stream, Claude API generates market questions and resolution criteria, and an admin review queue approves before publishing.</p>
+    <div class="callout">
+      <div class="callout-title">Example Flow</div>
+      <p>Burna Boy announces Coachella headline slot on Twitter → Flink detects spike → Claude generates "Will Burna Boy's Coachella set exceed 100K live viewers?" → Admin approves → Market live within 90 minutes of the tweet.</p>
+    </div>
+
+    <h3>4. WhatsApp NLU Engine</h3>
+    <p>Powers the conversational interface for the WhatsApp and Telegram bots. Uses Claude Haiku for fast intent classification (predict, check portfolio, deposit, help) and entity extraction (team names, market categories, amounts) across 7+ languages. spaCy handles tokenization and language detection for routing to the appropriate model.</p>
+    <table class="tech-table">
+      <tr><th>Capability</th><th>Implementation</th><th>Example</th></tr>
+      <tr><td>Intent Classification</td><td>Claude Haiku (few-shot)</td><td>"Will Arsenal win?" → intent: predict, entity: Arsenal</td></tr>
+      <tr><td>Multi-language</td><td>Language detection → locale-specific prompts</td><td>"Arsenal go win?" (Pidgin) → same intent</td></tr>
+      <tr><td>Context Memory</td><td>Redis session with 30-min TTL</td><td>Follow-up "How much?" after a bet → knows which market</td></tr>
+      <tr><td>Fallback</td><td>Keyword matching + fuzzy search</td><td>Handles typos and slang common in mobile typing</td></tr>
+    </table>
+
+    <h3>Cron Jobs & Background Workers</h3>
+    <p>Several critical background processes run on scheduled intervals:</p>
+    <table class="tech-table">
+      <tr><th>Job</th><th>Schedule</th><th>Technology</th><th>Purpose</th></tr>
+      <tr><td>Market Resolution Check</td><td>Every 60 seconds</td><td>Celery Beat + Redis</td><td>Check all active markets for resolution triggers</td></tr>
+      <tr><td>Odds Recalculation</td><td>Every 5 seconds (per active market)</td><td>Rust engine</td><td>Recalculate AMM odds based on position changes</td></tr>
+      <tr><td>Leaderboard Update</td><td>Every 5 minutes</td><td>Go + Redis ZADD</td><td>Recompute regional and global leaderboards</td></tr>
+      <tr><td>Streak Evaluation</td><td>Daily at midnight (per timezone)</td><td>Go + Cron</td><td>Check and update daily prediction streaks</td></tr>
+      <tr><td>Recommendation Retraining</td><td>Daily at 3 AM UTC</td><td>Python + Ray</td><td>Retrain recommendation models on latest interaction data</td></tr>
+      <tr><td>Trend Monitoring</td><td>Every 15 minutes</td><td>Python + Flink</td><td>Scan social media and news for market-worthy events</td></tr>
+      <tr><td>KYC Re-verification</td><td>Weekly</td><td>Go + Sumsub webhook</td><td>Re-check expired or flagged KYC documents</td></tr>
+      <tr><td>Analytics Aggregation</td><td>Hourly</td><td>ClickHouse materialized views</td><td>Funnel metrics, cohort analysis, revenue reporting</td></tr>
+      <tr><td>Currency Rate Update</td><td>Every 30 minutes</td><td>Go + Open Exchange Rates API</td><td>Update NGN, KES, PHP, EUR exchange rates</td></tr>
+      <tr><td>Notification Digest</td><td>Configurable per user (default: 8 AM local)</td><td>Node.js + Kafka</td><td>Daily digest of resolved markets, friend activity, streaks</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ==================== DATA LAYER ==================== -->
+<div class="section" id="data">
+  <div class="writeup">
+    <h2>Data & Storage Layer</h2>
+    <p>PredictX's data layer is purpose-built for the dual demands of a financial system (ACID transactions, audit trails, zero data loss) and a social platform (real-time feeds, search, analytics). Each storage technology is chosen for its specific strength.</p>
+
+    <h3>PostgreSQL 16 — Primary Database</h3>
+    <p>The source of truth for all transactional data: users, markets, orders, trades, wallets, and compliance records. Deployed as a Citus-sharded cluster for horizontal scaling.</p>
+    <ul>
+      <li><strong>Sharding Strategy:</strong> Shard by user_id for wallet/order tables, by market_id for market/trade tables</li>
+      <li><strong>Connection Pooling:</strong> pgBouncer with transaction-mode pooling — handles 10K+ concurrent connections</li>
+      <li><strong>Replication:</strong> Synchronous replication to a standby in the same AZ for zero data loss; async replicas in other regions for read scaling</li>
+      <li><strong>Audit:</strong> All financial mutations logged to an append-only audit table with pgcrypto checksums</li>
+    </ul>
+
+    <h3>Redis Cluster 7 — Cache & Real-time</h3>
+    <p>Redis serves multiple roles: session store (JWT + refresh tokens), cache (market data, odds, user profiles), real-time leaderboards (Sorted Sets), rate limiting (sliding window counters), and pub/sub for WebSocket fan-out.</p>
+    <ul>
+      <li><strong>Cluster Mode:</strong> 6-node cluster (3 masters + 3 replicas) for high availability</li>
+      <li><strong>Memory:</strong> ~50GB cluster, with eviction policy for cache data (allkeys-lru) and persistence for critical data (leaderboards)</li>
+      <li><strong>Pub/Sub:</strong> Market-specific channels for odds updates fan out to all WebSocket instances</li>
+    </ul>
+
+    <h3>Neo4j — Social Graph</h3>
+    <p>Stores friend relationships, Tribe memberships, and social interactions. Graph queries power "friends who predicted" social proof, Tribe recommendations, and influencer identification.</p>
+
+    <h3>ClickHouse — Analytics Warehouse</h3>
+    <p>Columnar analytics database for all event-level data: predictions, page views, funnel events, revenue, cohort analysis. Ingests from Kafka via ClickHouse Kafka Engine. Materialized views pre-aggregate hourly/daily metrics. Powers Grafana dashboards and the admin analytics panel.</p>
+
+    <h3>Elasticsearch — Search</h3>
+    <p>Full-text search across markets (multi-language), user profiles, and market comments. Powers the "Search" functionality in the app and the WhatsApp bot's fuzzy market matching.</p>
+
+    <h3>Apache Kafka — Event Bus</h3>
+    <p>The central nervous system connecting all services. Every significant event (order placed, trade matched, market resolved, user registered, payment processed) is published to Kafka. This enables event sourcing for the matching engine, real-time analytics, notification triggers, and full system auditability.</p>
+    <table class="tech-table">
+      <tr><th>Topic</th><th>Producers</th><th>Consumers</th></tr>
+      <tr><td>orders.placed</td><td>Order Service</td><td>Matching Engine, Analytics</td></tr>
+      <tr><td>trades.matched</td><td>Matching Engine</td><td>Settlement, WebSocket Gateway, Analytics</td></tr>
+      <tr><td>markets.resolved</td><td>Resolution Agent</td><td>Settlement, Notification, Analytics</td></tr>
+      <tr><td>users.registered</td><td>Auth Service</td><td>Gamification, Recommendation, Analytics</td></tr>
+      <tr><td>payments.completed</td><td>Payment Service</td><td>Wallet, Notification, Compliance</td></tr>
+      <tr><td>social.activity</td><td>Social Service</td><td>Feed Builder, Notification, Analytics</td></tr>
+    </table>
+
+    <h3>Object Storage — AWS S3</h3>
+    <p>Stores user avatars, market card images, KYC documents (encrypted, separate bucket with restricted IAM), matching engine state snapshots, and analytics exports.</p>
+  </div>
+</div>
+
+<!-- ==================== INFRASTRUCTURE ==================== -->
+<div class="section" id="infra">
+  <div class="writeup">
+    <h2>Infrastructure & DevOps</h2>
+    <p>PredictX runs on AWS across three regions, orchestrated by Kubernetes, with infrastructure-as-code via Terraform. The system is designed for 99.9% uptime, auto-scaling to handle traffic spikes during live events, and rapid deployment cycles.</p>
+
+    <h3>Multi-Region AWS Deployment</h3>
+    <table class="tech-table">
+      <tr><th>Region</th><th>AWS Region</th><th>Serves</th><th>Services</th></tr>
+      <tr><td>Asia</td><td>ap-south-1 (Mumbai)</td><td>India, Philippines, SEA</td><td>Full stack — primary region</td></tr>
+      <tr><td>Africa</td><td>af-south-1 (Cape Town)</td><td>Nigeria, Kenya, South Africa</td><td>Full stack — low latency for Africa</td></tr>
+      <tr><td>Europe</td><td>eu-central-1 (Frankfurt)</td><td>Spain, Denmark, Greece, EU</td><td>Full stack — GDPR compliant</td></tr>
+    </table>
+
+    <h3>Kubernetes (EKS) Architecture</h3>
+    <ul>
+      <li><strong>Node Pools:</strong> General-purpose (m6i.xlarge) for API services, compute-optimized (c6i.2xlarge) for matching engine, memory-optimized (r6i.xlarge) for Redis/caching</li>
+      <li><strong>Auto-scaling:</strong> Horizontal Pod Autoscaler based on CPU + custom metrics (request queue depth, WebSocket connections)</li>
+      <li><strong>Service Mesh:</strong> Istio for mTLS between services, traffic shifting for canary deployments, and observability</li>
+      <li><strong>Ingress:</strong> AWS ALB Ingress Controller with TLS termination</li>
+    </ul>
+
+    <h3>CI/CD Pipeline</h3>
+    <div class="flow-step"><div class="flow-num">1</div><div class="flow-text"><strong>GitHub Actions:</strong> PR triggers build, lint, unit tests, integration tests. Rust services use cargo clippy + cargo test. Go services use golangci-lint + go test.</div></div>
+    <div class="flow-step"><div class="flow-num">2</div><div class="flow-text"><strong>Container Build:</strong> Multi-stage Docker builds. Images pushed to Amazon ECR. Vulnerability scanning via Snyk.</div></div>
+    <div class="flow-step"><div class="flow-num">3</div><div class="flow-text"><strong>ArgoCD:</strong> GitOps deployment. Helm charts define desired state. ArgoCD syncs to Kubernetes clusters across all 3 regions.</div></div>
+    <div class="flow-step"><div class="flow-num">4</div><div class="flow-text"><strong>Canary Deploy:</strong> New versions serve 5% of traffic initially. Automated rollback if error rate exceeds threshold.</div></div>
+    <div class="flow-step"><div class="flow-num">5</div><div class="flow-text"><strong>Feature Flags:</strong> LaunchDarkly gates new features per country, user segment, or percentage rollout.</div></div>
+
+    <h3>Observability Stack</h3>
+    <table class="tech-table">
+      <tr><th>Layer</th><th>Tool</th><th>Purpose</th></tr>
+      <tr><td>Metrics</td><td>Datadog + Prometheus</td><td>System metrics, custom business metrics, SLO dashboards</td></tr>
+      <tr><td>Tracing</td><td>OpenTelemetry + Datadog APM</td><td>Distributed request tracing across all services</td></tr>
+      <tr><td>Logging</td><td>Fluentd + Elasticsearch + Kibana</td><td>Structured JSON logs, centralized search</td></tr>
+      <tr><td>Alerting</td><td>PagerDuty + Datadog Monitors</td><td>On-call rotation, escalation policies, incident management</td></tr>
+      <tr><td>Dashboards</td><td>Grafana</td><td>Business dashboards: DAU, revenue, funnel, market activity</td></tr>
+      <tr><td>Error Tracking</td><td>Sentry</td><td>Client-side crash reporting for React Native + PWA</td></tr>
+    </table>
+
+    <h3>Security & Compliance</h3>
+    <ul>
+      <li><strong>Secrets Management:</strong> HashiCorp Vault for all API keys, database credentials, encryption keys. Dynamic secrets for database access.</li>
+      <li><strong>Encryption:</strong> AES-256 at rest (AWS KMS), TLS 1.3 in transit, field-level encryption for PII and KYC data</li>
+      <li><strong>Access Control:</strong> RBAC via Kubernetes + IAM. Least privilege principle. Admin actions require MFA.</li>
+      <li><strong>Compliance:</strong> SOC 2 Type II audit trail, GDPR data subject rights (export/delete), PROGA compliance for India (zero real money)</li>
+      <li><strong>Penetration Testing:</strong> Quarterly external pen tests. Bug bounty program post-launch.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ==================== SYSTEM FLOWS ==================== -->
+<div class="section" id="flows">
+  <div class="writeup">
+    <h2>Key System Flows</h2>
+    <p>End-to-end flow of the most critical user journeys through the system architecture.</p>
+
+    <h3>Flow 1: User Makes a Prediction (Swipe-to-Bet)</h3>
+    <div class="flow-step"><div class="flow-num">1</div><div class="flow-text"><strong>Client (React Native):</strong> User swipes right (YES) on a market card. App sends POST /v1/orders with market_id, side (YES), amount.</div></div>
+    <div class="flow-step"><div class="flow-num">2</div><div class="flow-text"><strong>CloudFlare Edge:</strong> Request passes WAF rules, routed to nearest API Gateway.</div></div>
+    <div class="flow-step"><div class="flow-num">3</div><div class="flow-text"><strong>Kong Gateway:</strong> Validates JWT, rate-limit check, routes to Order Service.</div></div>
+    <div class="flow-step"><div class="flow-num">4</div><div class="flow-text"><strong>Order Service (Go):</strong> Validates balance from Wallet Service (gRPC), checks responsible gambling limits, checks market is active. Publishes order to Kafka <code>orders.placed</code>.</div></div>
+    <div class="flow-step"><div class="flow-num">5</div><div class="flow-text"><strong>Matching Engine (Rust):</strong> Consumes order. Checks CLOB for matching counter-orders. If no match, fills against AMM at current LMSR price. Publishes trade to Kafka <code>trades.matched</code>.</div></div>
+    <div class="flow-step"><div class="flow-num">6</div><div class="flow-text"><strong>Settlement (Rust):</strong> Consumes trade. Debits buyer's wallet, credits position. Updates market volume. Atomic transaction with PostgreSQL.</div></div>
+    <div class="flow-step"><div class="flow-num">7</div><div class="flow-text"><strong>WebSocket Gateway (Elixir):</strong> Consumes trade. Broadcasts updated odds to all market subscribers. Sends trade confirmation to the user's WebSocket connection.</div></div>
+    <div class="flow-step"><div class="flow-num">8</div><div class="flow-text"><strong>Social Service:</strong> Publishes activity to user's friends' feeds. Gamification engine awards XP.</div></div>
+    <div class="flow-step"><div class="flow-num">9</div><div class="flow-text"><strong>Client:</strong> Receives WebSocket confirmation. Plays celebration animation. Generates shareable WhatsApp card.</div></div>
+
+    <div class="callout">
+      <div class="callout-title">End-to-end latency target: &lt; 200ms</div>
+      <p>From swipe gesture to confirmation animation on the client. Matching engine contributes &lt; 10ms. Network + API overhead is the dominant factor, reduced by edge proximity.</p>
+    </div>
+
+    <h3>Flow 2: WhatsApp Bot Prediction</h3>
+    <div class="flow-step"><div class="flow-num">1</div><div class="flow-text"><strong>User sends "Arsenal win?"</strong> in WhatsApp → Meta webhook fires to Bot Service.</div></div>
+    <div class="flow-step"><div class="flow-num">2</div><div class="flow-text"><strong>NLU Engine (Claude Haiku):</strong> Classifies intent = "predict", extracts entity = "Arsenal". Searches Elasticsearch for relevant markets.</div></div>
+    <div class="flow-step"><div class="flow-num">3</div><div class="flow-text"><strong>Bot Service:</strong> Returns rich media template with market details, current odds, and YES/NO interactive buttons.</div></div>
+    <div class="flow-step"><div class="flow-num">4</div><div class="flow-text"><strong>User taps YES</strong> → Webhook fires again. Bot Service creates order via Order Service (same flow as app). Sends confirmation card back to WhatsApp.</div></div>
+
+    <h3>Flow 3: Market Resolution (Automated)</h3>
+    <div class="flow-step"><div class="flow-num">1</div><div class="flow-text"><strong>Celery Beat (cron):</strong> Every 60s, checks all active markets for resolution triggers (time-based, API data match).</div></div>
+    <div class="flow-step"><div class="flow-num">2</div><div class="flow-text"><strong>Resolution Agent (Python):</strong> Fetches outcome data from external API (e.g., football score from API-Football). Validates data quality.</div></div>
+    <div class="flow-step"><div class="flow-num">3</div><div class="flow-text"><strong>AI Validation (Claude):</strong> Cross-references multiple data sources. Confirms resolution with high confidence.</div></div>
+    <div class="flow-step"><div class="flow-num">4</div><div class="flow-text"><strong>Market Service:</strong> Transitions market to "Resolving" state. 15-minute dispute window opens.</div></div>
+    <div class="flow-step"><div class="flow-num">5</div><div class="flow-text"><strong>Settlement Engine:</strong> After dispute window, calculates payouts. Winners' wallets credited atomically. Losers' positions marked as settled.</div></div>
+    <div class="flow-step"><div class="flow-num">6</div><div class="flow-text"><strong>Notifications:</strong> Push notifications sent to all market participants with result + P&L. Gamification engine updates streaks and accuracy scores.</div></div>
+
+    <h3>Flow 4: Real-Money Deposit (Nigeria — Paystack)</h3>
+    <div class="flow-step"><div class="flow-num">1</div><div class="flow-text"><strong>Client:</strong> User taps "Add Funds" → selects bank transfer → enters NGN amount.</div></div>
+    <div class="flow-step"><div class="flow-num">2</div><div class="flow-text"><strong>Payment Service (Go):</strong> Initiates Paystack transaction. Returns checkout URL.</div></div>
+    <div class="flow-step"><div class="flow-num">3</div><div class="flow-text"><strong>Paystack:</strong> User completes payment (bank transfer or card). Paystack webhook fires on success.</div></div>
+    <div class="flow-step"><div class="flow-num">4</div><div class="flow-text"><strong>Payment Service:</strong> Validates webhook signature. Credits user's NGN wallet via double-entry ledger write to PostgreSQL.</div></div>
+    <div class="flow-step"><div class="flow-num">5</div><div class="flow-text"><strong>KYC Check:</strong> If deposit exceeds 10K NGN and user is Tier 1, triggers Sumsub KYC upgrade flow (BVN verification).</div></div>
+    <div class="flow-step"><div class="flow-num">6</div><div class="flow-text"><strong>Notification:</strong> Push notification confirms deposit. Wallet balance updates in real-time via WebSocket.</div></div>
+
+    <h3>Scaling Strategy for Millions of Users</h3>
+    <table class="tech-table">
+      <tr><th>Challenge</th><th>Solution</th><th>Scale Target</th></tr>
+      <tr><td>API requests</td><td>Horizontal pod autoscaling + CloudFlare edge caching</td><td>50K requests/sec sustained, 200K burst</td></tr>
+      <tr><td>WebSocket connections</td><td>Elixir BEAM VM — 2M connections per node, multi-node clustering</td><td>10M+ concurrent connections</td></tr>
+      <tr><td>Order matching</td><td>Rust engine — single-threaded per market, partition across markets</td><td>10K orders/sec per market</td></tr>
+      <tr><td>Database writes</td><td>Citus sharding + write-ahead log batching</td><td>100K transactions/sec</td></tr>
+      <tr><td>Event throughput</td><td>Kafka cluster — partition by market_id and user_id</td><td>1M events/sec</td></tr>
+      <tr><td>Search queries</td><td>Elasticsearch cluster with read replicas</td><td>10K queries/sec</td></tr>
+      <tr><td>AI inference</td><td>ONNX Runtime on GPU instances + model caching</td><td>5K recommendations/sec</td></tr>
+      <tr><td>Live event spikes</td><td>Pre-warmed capacity for known events (IPL, elections)</td><td>10x normal traffic for 4-hour windows</td></tr>
+    </table>
+  </div>
+</div>
+
+</div>
+
+<script>
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+  window.scrollTo({ top: document.querySelector('.tabs').offsetTop - 10, behavior: 'smooth' });
+}
+</script>
+
+</body>
+</html>
