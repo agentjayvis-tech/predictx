@@ -1,0 +1,124 @@
+name: matching-engine
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/matching-engine/**'
+      - '.github/workflows/matching-engine.yml'
+  pull_request:
+    paths:
+      - 'services/matching-engine/**'
+      - '.github/workflows/matching-engine.yml'
+
+defaults:
+  run:
+    working-directory: services/matching-engine
+
+jobs:
+  # ── Lint ─────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install system deps (rdkafka cmake-build)
+        run: sudo apt-get update && sudo apt-get install -y cmake clang libclang-dev libssl-dev
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: services/matching-engine
+
+      - name: Rustfmt check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+  # ── Unit tests (no external deps) ────────────────────────────────────────────
+  test:
+    name: Test
+    needs: lint
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: matching_user
+          POSTGRES_PASSWORD: matching_pass
+          POSTGRES_DB: matching_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:8-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    env:
+      DATABASE_URL: postgres://matching_user:matching_pass@localhost:5432/matching_db
+      REDIS_URL: redis://localhost:6379
+      KAFKA_BROKERS: localhost:9092  # no Kafka in CI; unit tests don't require it
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system deps
+        run: sudo apt-get update && sudo apt-get install -y cmake clang libclang-dev libssl-dev
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: services/matching-engine
+
+      - name: Run unit tests (no external deps)
+        run: |
+          cargo test \
+            --lib \
+            -- \
+            engine:: \
+            domain:: \
+            config::
+
+      - name: Build release binary
+        run: cargo build --release
+
+  # ── Docker build (main branch only) ──────────────────────────────────────────
+  docker:
+    name: Docker
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: services/matching-engine
+          push: false
+          tags: predictx/matching-engine:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

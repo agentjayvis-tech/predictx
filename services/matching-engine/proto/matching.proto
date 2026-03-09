@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package matching;
+
+option java_package = "com.predictx.matching";
+
+// ─── Service Definition ───────────────────────────────────────────────────────
+
+service MatchingService {
+  // Get the current order book snapshot for a market.
+  rpc GetOrderBook(GetOrderBookRequest) returns (OrderBookResponse);
+
+  // Get the current implied odds for a market (LMSR AMM).
+  rpc GetMarketOdds(GetMarketOddsRequest) returns (MarketOddsResponse);
+
+  // Stream real-time trade events for a market.
+  rpc StreamTrades(StreamTradesRequest) returns (stream TradeEvent);
+}
+
+// ─── Request / Response types ─────────────────────────────────────────────────
+
+message GetOrderBookRequest {
+  string market_id = 1;
+}
+
+message OrderBookResponse {
+  string market_id = 1;
+  uint64 best_bid_price = 2;   // 0 if no bids
+  uint64 best_ask_price = 3;   // 0 if no asks
+  uint64 bid_depth       = 4;  // total number of bid orders
+  uint64 ask_depth       = 5;  // total number of ask orders
+  uint64 seq_no          = 6;  // latest sequence number
+}
+
+message GetMarketOddsRequest {
+  string market_id = 1;
+}
+
+message MarketOddsResponse {
+  string market_id = 1;
+  // Implied odds per outcome (floats 0–1, sum = 1.0)
+  repeated double odds = 2;
+  // Price in minor units per outcome (1–99)
+  repeated uint64 prices_minor = 3;
+}
+
+message StreamTradesRequest {
+  string market_id = 1;
+}
+
+message TradeEvent {
+  string trade_id      = 1;
+  string market_id     = 2;
+  string buyer_id      = 3;
+  string seller_id     = 4;  // empty for AMM fills
+  uint64 price_minor   = 5;
+  uint64 quantity      = 6;
+  uint32 outcome_index = 7;
+  string match_type    = 8;  // "clob" | "amm"
+  uint64 seq_no        = 9;
+  string matched_at    = 10; // RFC 3339
+}

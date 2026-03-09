@@ -13,17 +13,26 @@ import (
 
 // ─── Inbound event payloads ───────────────────────────────────────────────────
 
-// OrderMatchedPayload is emitted by the Order Service / Matching Engine
-// when an order is successfully matched. Settlement Service uses it to track positions.
-type OrderMatchedPayload struct {
-	Event          string    `json:"event"`
-	OrderID        string    `json:"order_id"`
-	UserID         string    `json:"user_id"`
-	MarketID       string    `json:"market_id"`
-	OutcomeIndex   int       `json:"outcome_index"`
-	StakeMinor     int64     `json:"stake_minor"`
-	Currency       string    `json:"currency"`
-	Timestamp      time.Time `json:"timestamp"`
+// TradeMatchedPayload is emitted by the Matching Engine onto trades.matched
+// when a trade is successfully matched (CLOB or AMM).
+// Field names match the TradeMatchedEvent published by services/matching-engine.
+type TradeMatchedPayload struct {
+	Event        string    `json:"event"`
+	TradeID      string    `json:"trade_id"`
+	MarketID     string    `json:"market_id"`
+	BuyerID      string    `json:"buyer_id"`   // YES-side participant
+	SellerID     string    `json:"seller_id"`  // NO-side participant; empty for AMM fills
+	PriceMinor   int64     `json:"price_minor"` // price per share in minor units
+	Quantity     int64     `json:"quantity"`    // shares matched
+	OutcomeIndex int       `json:"outcome_index"`
+	MatchType    string    `json:"match_type"` // "clob" | "amm"
+	SeqNo        uint64    `json:"seq_no"`
+	MatchedAt    time.Time `json:"matched_at"`
+}
+
+// stakeMinor computes total stake = price_per_share × quantity.
+func (p TradeMatchedPayload) stakeMinor() int64 {
+	return p.PriceMinor * p.Quantity
 }
 
 // MarketResolvedPayload is emitted by the Resolution Service.
@@ -105,6 +114,8 @@ func (c *Consumer) Run(ctx context.Context) {
 	<-ctx.Done()
 }
 
+// consumeOrderMatched processes trades.matched events from the Matching Engine.
+// Renamed internally; the reader is still called orderMatchedReader for minimal diff.
 func (c *Consumer) consumeOrderMatched(ctx context.Context) {
 	c.log.Info("kafka consumer started", zap.String("topic", c.orderMatchedReader.Config().Topic))
 	for {
@@ -113,43 +124,44 @@ func (c *Consumer) consumeOrderMatched(ctx context.Context) {
 			if ctx.Err() != nil {
 				return
 			}
-			c.log.Error("order.matched: read error", zap.Error(err))
+			c.log.Error("trades.matched: read error", zap.Error(err))
 			continue
 		}
 
-		var payload OrderMatchedPayload
+		var payload TradeMatchedPayload
 		if err := json.Unmarshal(msg.Value, &payload); err != nil {
-			c.log.Warn("order.matched: unmarshal error", zap.Error(err))
+			c.log.Warn("trades.matched: unmarshal error", zap.Error(err))
 			continue
 		}
 
-		userID, err := uuid.Parse(payload.UserID)
+		// buyer_id is the YES-side participant whose position we record
+		userID, err := uuid.Parse(payload.BuyerID)
 		if err != nil {
-			c.log.Warn("order.matched: invalid user_id", zap.String("raw", payload.UserID))
+			c.log.Warn("trades.matched: invalid buyer_id", zap.String("raw", payload.BuyerID))
 			continue
 		}
 		marketID, err := uuid.Parse(payload.MarketID)
 		if err != nil {
-			c.log.Warn("order.matched: invalid market_id", zap.String("raw", payload.MarketID))
+			c.log.Warn("trades.matched: invalid market_id", zap.String("raw", payload.MarketID))
 			continue
 		}
 
-		currency := payload.Currency
-		if currency == "" {
-			currency = "COINS"
-		}
+		// stake = price_per_share × quantity (total cost of the position)
+		stakeMinor := payload.stakeMinor()
 
-		if err := c.svc.RecordPositionFromEvent(ctx, userID, marketID, payload.OutcomeIndex, payload.StakeMinor, currency); err != nil {
-			c.log.Error("order.matched: record position failed",
-				zap.String("order_id", payload.OrderID),
+		if err := c.svc.RecordPositionFromEvent(ctx, userID, marketID, payload.OutcomeIndex, stakeMinor, "COINS"); err != nil {
+			c.log.Error("trades.matched: record position failed",
+				zap.String("trade_id", payload.TradeID),
 				zap.Error(err),
 			)
 		} else {
 			c.log.Info("position recorded",
-				zap.String("user_id", payload.UserID),
+				zap.String("trade_id", payload.TradeID),
+				zap.String("buyer_id", payload.BuyerID),
 				zap.String("market_id", payload.MarketID),
 				zap.Int("outcome", payload.OutcomeIndex),
-				zap.Int64("stake", payload.StakeMinor),
+				zap.Int64("stake", stakeMinor),
+				zap.String("match_type", payload.MatchType),
 			)
 		}
 	}

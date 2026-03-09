@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS trades;
+DROP TYPE IF EXISTS match_type;
