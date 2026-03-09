@@ -87,10 +87,10 @@ func (s *WalletService) Deposit(ctx context.Context, userID uuid.UUID, currency 
 
 	// Refresh wallet balance for fraud check.
 	wallet.BalanceMinor += amountMinor
-	go s.fraud.Check(context.Background(), wallet, txn)
+	go s.runFraudCheck(wallet, txn)
 
 	// Publish event (non-blocking in terms of the caller; publisher is synchronous internally for durability).
-	go s.publisher.PublishPaymentCompleted(context.Background(), txn, wallet.BalanceMinor)
+	go s.runPublishEvent(txn, wallet.BalanceMinor)
 
 	return txn, nil
 }
@@ -120,7 +120,7 @@ func (s *WalletService) Spend(ctx context.Context, userID uuid.UUID, currency do
 	s.balCache.Invalidate(ctx, userID, currency)
 
 	wallet.BalanceMinor -= amountMinor
-	go s.fraud.Check(context.Background(), wallet, txn)
+	go s.runFraudCheck(wallet, txn)
 
 	return txn, nil
 }
@@ -149,7 +149,7 @@ func (s *WalletService) Refund(ctx context.Context, userID uuid.UUID, currency d
 
 	s.balCache.Invalidate(ctx, userID, currency)
 	wallet.BalanceMinor += amountMinor
-	go s.fraud.Check(context.Background(), wallet, txn)
+	go s.runFraudCheck(wallet, txn)
 
 	return txn, nil
 }
@@ -179,8 +179,8 @@ func (s *WalletService) Payout(ctx context.Context, userID uuid.UUID, currency d
 
 	s.balCache.Invalidate(ctx, userID, currency)
 	wallet.BalanceMinor += amountMinor
-	go s.fraud.Check(context.Background(), wallet, txn)
-	go s.publisher.PublishPaymentCompleted(context.Background(), txn, wallet.BalanceMinor)
+	go s.runFraudCheck(wallet, txn)
+	go s.runPublishEvent(txn, wallet.BalanceMinor)
 
 	return txn, nil
 }
@@ -230,4 +230,31 @@ func (s *WalletService) DailyReward(ctx context.Context, userID uuid.UUID, coins
 	)
 	_ = wallet
 	return txn, nil
+}
+
+// runFraudCheck wraps fraud detection in a goroutine with panic recovery.
+func (s *WalletService) runFraudCheck(wallet *domain.Wallet, txn *domain.Transaction) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.log.Error("fraud check panicked",
+				zap.Any("panic", r),
+				zap.String("user_id", wallet.UserID.String()),
+				zap.String("txn_id", txn.ID.String()),
+			)
+		}
+	}()
+	s.fraud.Check(context.Background(), wallet, txn)
+}
+
+// runPublishEvent wraps event publishing in a goroutine with panic recovery.
+func (s *WalletService) runPublishEvent(txn *domain.Transaction, balanceMinor int64) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.log.Error("event publish panicked",
+				zap.Any("panic", r),
+				zap.String("txn_id", txn.ID.String()),
+			)
+		}
+	}()
+	s.publisher.PublishPaymentCompleted(context.Background(), txn, balanceMinor)
 }

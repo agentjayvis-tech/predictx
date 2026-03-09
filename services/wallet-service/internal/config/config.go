@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 
@@ -34,6 +35,50 @@ type Config struct {
 
 	// Gamification
 	DailyRewardCoins int64 `mapstructure:"DAILY_REWARD_COINS"`
+}
+
+// Validate checks that required fields are set and configuration values are in acceptable ranges.
+func (c *Config) Validate() error {
+	if c.DatabaseURL == "" {
+		return fmt.Errorf("DATABASE_URL is required")
+	}
+	if c.RedisURL == "" {
+		return fmt.Errorf("REDIS_URL is required")
+	}
+	if c.KafkaBrokers == "" {
+		return fmt.Errorf("KAFKA_BROKERS is required")
+	}
+
+	if c.DatabaseMaxConns <= 0 {
+		return fmt.Errorf("DATABASE_MAX_CONNS must be positive, got %d", c.DatabaseMaxConns)
+	}
+	if c.DatabaseMinConns < 0 {
+		return fmt.Errorf("DATABASE_MIN_CONNS must be non-negative, got %d", c.DatabaseMinConns)
+	}
+	if c.DatabaseMinConns > c.DatabaseMaxConns {
+		return fmt.Errorf("DATABASE_MIN_CONNS (%d) must be <= DATABASE_MAX_CONNS (%d)",
+			c.DatabaseMinConns, c.DatabaseMaxConns)
+	}
+
+	if c.RedisBalanceTTLSecs <= 0 {
+		return fmt.Errorf("REDIS_BALANCE_TTL_SECONDS must be positive, got %d", c.RedisBalanceTTLSecs)
+	}
+
+	if c.FraudMaxChangesPerMin <= 0 {
+		return fmt.Errorf("FRAUD_MAX_CHANGES_PER_MIN must be positive, got %d", c.FraudMaxChangesPerMin)
+	}
+	if c.FraudLargeCreditThreshold <= 0 {
+		return fmt.Errorf("FRAUD_LARGE_CREDIT_THRESHOLD must be positive, got %d", c.FraudLargeCreditThreshold)
+	}
+	if c.FraudRapidDrainPct <= 0 || c.FraudRapidDrainPct > 100 {
+		return fmt.Errorf("FRAUD_RAPID_DRAIN_PCT must be between 1 and 100, got %d", c.FraudRapidDrainPct)
+	}
+
+	if c.DailyRewardCoins <= 0 {
+		return fmt.Errorf("DAILY_REWARD_COINS must be positive, got %d", c.DailyRewardCoins)
+	}
+
+	return nil
 }
 
 var (
@@ -71,6 +116,9 @@ func Load() *Config {
 		cfg := &Config{}
 		if err := v.Unmarshal(cfg); err != nil {
 			panic("config: failed to unmarshal: " + err.Error())
+		}
+		if err := cfg.Validate(); err != nil {
+			panic("config: validation failed: " + err.Error())
 		}
 		instance = cfg
 	})

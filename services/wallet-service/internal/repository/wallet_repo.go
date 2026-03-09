@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/predictx/wallet-service/internal/domain"
 )
@@ -147,11 +148,14 @@ func (r *WalletRepo) ApplyTransaction(ctx context.Context, req domain.ApplyTxnRe
 		req.UserID, wallet.ID, txnID, string(req.EntryType), req.AmountMinor, req.Description,
 	).Scan(&newBalance)
 	if err != nil {
-		if isDBError(err, "insufficient_funds") {
-			return nil, domain.ErrInsufficientFunds
-		}
-		if isDBError(err, "wallet_not_found") {
-			return nil, domain.ErrWalletNotFound
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			if pgErr.Message == "insufficient_funds" {
+				return nil, domain.ErrInsufficientFunds
+			}
+			if pgErr.Message == "wallet_not_found" {
+				return nil, domain.ErrWalletNotFound
+			}
 		}
 		return nil, fmt.Errorf("wallet_repo: apply_double_entry: %w", err)
 	}
@@ -288,13 +292,3 @@ func (r *WalletRepo) getTransactionByIdempotencyKey(ctx context.Context, key str
 	return t, nil
 }
 
-// isDBError checks whether a PostgreSQL error message matches the given code.
-func isDBError(err error, code string) bool {
-	return err != nil && errors.Is(err, errors.New(code)) ||
-		(err != nil && containsString(err.Error(), code))
-}
-
-func containsString(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub ||
-		len(s) > 0 && (s[:len(sub)] == sub || containsString(s[1:], sub)))
-}
