@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package wallet.v1;
+
+option go_package = "github.com/predictx/wallet-service/internal/api/grpc/walletpb";
+
+// WalletService is the internal gRPC interface consumed by Order Service and Settlement Service.
+service WalletService {
+    // CheckBalance returns whether the user has sufficient balance.
+    rpc CheckBalance (CheckBalanceRequest) returns (CheckBalanceResponse);
+    // Debit decrements user balance (e.g. for bet placement).
+    rpc Debit (DebitRequest) returns (TransactionResponse);
+    // Credit increments user balance (e.g. payout, refund, daily reward).
+    rpc Credit (CreditRequest) returns (TransactionResponse);
+}
+
+message CheckBalanceRequest {
+    string user_id  = 1;
+    string currency = 2;
+    int64  amount   = 3; // check if balance >= amount
+}
+
+message CheckBalanceResponse {
+    bool  sufficient      = 1;
+    int64 current_balance = 2;
+}
+
+message DebitRequest {
+    string user_id         = 1;
+    string currency        = 2;
+    int64  amount_minor    = 3;
+    string idempotency_key = 4;
+    string reference_id    = 5;
+    string reference_type  = 6;
+    string txn_type        = 7; // 'spend'
+    string description     = 8;
+}
+
+message CreditRequest {
+    string user_id         = 1;
+    string currency        = 2;
+    int64  amount_minor    = 3;
+    string idempotency_key = 4;
+    string reference_id    = 5;
+    string reference_type  = 6;
+    string txn_type        = 7; // 'payout', 'refund', 'daily_reward', 'deposit'
+    string description     = 8;
+}
+
+message TransactionResponse {
+    string transaction_id    = 1;
+    int64  new_balance_minor = 2;
+    bool   already_processed = 3; // true on idempotency hit (safe to retry)
+}
