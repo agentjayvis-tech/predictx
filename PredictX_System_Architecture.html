@@ -252,12 +252,12 @@
       <div class="arch-box box-teal">
         <h3>Primary Database</h3>
         <p>Users, markets, orders, transactions. ACID compliant. Multi-AZ replicas.</p>
-        <div class="tech"><span>PostgreSQL 16</span><span>Citus (sharding)</span><span>pgBouncer</span></div>
+        <div class="tech"><span>PostgreSQL 17</span><span>Citus (sharding)</span><span>pgBouncer</span></div>
       </div>
       <div class="arch-box box-teal">
         <h3>Cache & Real-time</h3>
         <p>Session, odds, leaderboards, rate limiting, pub/sub for WebSocket fan-out.</p>
-        <div class="tech"><span>Redis Cluster 7</span><span>KeyDB</span></div>
+        <div class="tech"><span>Redis Cluster 8</span><span>KeyDB</span></div>
       </div>
       <div class="arch-box box-teal">
         <h3>Search & Analytics</h3>
@@ -543,7 +543,7 @@
     <h2>Data & Storage Layer</h2>
     <p>PredictX's data layer is purpose-built for the dual demands of a financial system (ACID transactions, audit trails, zero data loss) and a social platform (real-time feeds, search, analytics). Each storage technology is chosen for its specific strength.</p>
 
-    <h3>PostgreSQL 16 — Primary Database</h3>
+    <h3>PostgreSQL 17 — Primary Database</h3>
     <p>The source of truth for all transactional data: users, markets, orders, trades, wallets, and compliance records. Deployed as a Citus-sharded cluster for horizontal scaling.</p>
     <ul>
       <li><strong>Sharding Strategy:</strong> Shard by user_id for wallet/order tables, by market_id for market/trade tables</li>
