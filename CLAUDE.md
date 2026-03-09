@@ -1,0 +1,2 @@
+This Directory holds code/artifacts for an web/mobile application for predictions and gamification of it.
+All documentation and stories/tasks are added to Notion. Project entry page is https://www.notion.so/PredictX-Project-Hub-31ecc2b170e6817e97f6fc88b9d99d81

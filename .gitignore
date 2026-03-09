@@ -1,0 +1,71 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+dist/
+build/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.so
+htmlcov/
+.coverage
+.coverage.*
+
+# === Environment ===
+.env
+.env.*
+!.env.example
+
+# === Node / JS ===
+node_modules/
+.next/
+.expo/
+.turbo/
+dist/
+*.tsbuildinfo
+
+# === Go ===
+*.exe
+*.exe~
+*.dll
+*.dylib
+/vendor/
+
+# === Rust ===
+/target/
+Cargo.lock
+
+# === Elixir ===
+/_build/
+/deps/
+erl_crash.dump
+*.beam
+
+# === IDEs ===
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# === Infra ===
+*.tfstate
+*.tfstate.backup
+.terraform/
+*.pem
+*.key
+kubeconfig
+
+# === Misc ===
+*.log
+*.tmp
+coverage/
