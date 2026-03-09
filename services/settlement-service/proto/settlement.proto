@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package settlement;
+
+option go_package = "github.com/predictx/settlement-service/internal/api/grpc/settlementpb";
+
+// SettlementService exposes settlement and P&L data to other microservices.
+service SettlementService {
+  // GetSettlement returns the settlement record for a resolved market.
+  rpc GetSettlement(GetSettlementRequest) returns (SettlementResponse);
+
+  // GetUserPnL returns a user's P&L for a specific market after settlement.
+  rpc GetUserPnL(GetUserPnLRequest) returns (UserPnLResponse);
+
+  // GetUserPositions streams all positions for a user.
+  rpc GetUserPositions(GetUserPositionsRequest) returns (stream PositionResponse);
+}
+
+message GetSettlementRequest {
+  string market_id = 1;
+}
+
+message SettlementResponse {
+  string settlement_id       = 1;
+  string market_id           = 2;
+  string status              = 3;
+  int32  winning_outcome     = 4;
+  int64  total_pool_minor    = 5;
+  int64  insurance_fee_minor = 6;
+  int64  net_pool_minor      = 7;
+  int32  winner_count        = 8;
+  int32  loser_count         = 9;
+  string currency            = 10;
+  string settled_at          = 11;
+}
+
+message GetUserPnLRequest {
+  string market_id = 1;
+  string user_id   = 2;
+}
+
+message UserPnLResponse {
+  string market_id  = 1;
+  string user_id    = 2;
+  int64  pnl_minor  = 3;
+  bool   is_settled = 4;
+}
+
+message GetUserPositionsRequest {
+  string user_id = 1;
+}
+
+message PositionResponse {
+  string position_id   = 1;
+  string user_id       = 2;
+  string market_id     = 3;
+  int32  outcome_index = 4;
+  int64  stake_minor   = 5;
+  string currency      = 6;
+  string status        = 7;
+}
