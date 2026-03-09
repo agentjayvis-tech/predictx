@@ -35,6 +35,14 @@ type Config struct {
 
 	// Gamification
 	DailyRewardCoins int64 `mapstructure:"DAILY_REWARD_COINS"`
+
+	// Responsible Gambling
+	EnableRGFeatures                  bool   `mapstructure:"ENABLE_RG_FEATURES"`
+	DefaultDailyDepositLimitMinor     int64  `mapstructure:"DEFAULT_DAILY_DEPOSIT_LIMIT_MINOR"`
+	DefaultMonthlyDepositLimitMinor   int64  `mapstructure:"DEFAULT_MONTHLY_DEPOSIT_LIMIT_MINOR"`
+	DefaultLossStreakNotificationThreshold int `mapstructure:"DEFAULT_LOSS_STREAK_NOTIFICATION_THRESHOLD"`
+	RGPartnershipName                 string `mapstructure:"RG_PARTNERSHIP_NAME"`
+	CoolOffCancellationPolicy         string `mapstructure:"COOL_OFF_CANCELLATION_POLICY"` // JSON: {"IN": true, "NG": false, ...}
 }
 
 // Validate checks that required fields are set and configuration values are in acceptable ranges.
@@ -78,6 +86,19 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("DAILY_REWARD_COINS must be positive, got %d", c.DailyRewardCoins)
 	}
 
+	// Responsible Gambling validation
+	if c.EnableRGFeatures {
+		if c.DefaultDailyDepositLimitMinor <= 0 {
+			return fmt.Errorf("DEFAULT_DAILY_DEPOSIT_LIMIT_MINOR must be positive when RG enabled, got %d", c.DefaultDailyDepositLimitMinor)
+		}
+		if c.DefaultMonthlyDepositLimitMinor > 0 && c.DefaultMonthlyDepositLimitMinor < c.DefaultDailyDepositLimitMinor {
+			return fmt.Errorf("DEFAULT_MONTHLY_DEPOSIT_LIMIT_MINOR must be >= DEFAULT_DAILY_DEPOSIT_LIMIT_MINOR")
+		}
+		if c.DefaultLossStreakNotificationThreshold < 1 || c.DefaultLossStreakNotificationThreshold > 10 {
+			return fmt.Errorf("DEFAULT_LOSS_STREAK_NOTIFICATION_THRESHOLD must be between 1 and 10, got %d", c.DefaultLossStreakNotificationThreshold)
+		}
+	}
+
 	return nil
 }
 
@@ -104,6 +125,14 @@ func Load() *Config {
 		v.SetDefault("FRAUD_LARGE_CREDIT_THRESHOLD", 100000)
 		v.SetDefault("FRAUD_RAPID_DRAIN_PCT", 80)
 		v.SetDefault("DAILY_REWARD_COINS", 100)
+
+		// Responsible Gambling defaults
+		v.SetDefault("ENABLE_RG_FEATURES", true)
+		v.SetDefault("DEFAULT_DAILY_DEPOSIT_LIMIT_MINOR", 5000000)   // $50 USD equivalent
+		v.SetDefault("DEFAULT_MONTHLY_DEPOSIT_LIMIT_MINOR", 150000000) // $1500 USD equivalent
+		v.SetDefault("DEFAULT_LOSS_STREAK_NOTIFICATION_THRESHOLD", 3)
+		v.SetDefault("RG_PARTNERSHIP_NAME", "Gambler's Anonymous")
+		v.SetDefault("COOL_OFF_CANCELLATION_POLICY", `{"IN": true, "NG": false, "KE": false, "PH": false}`)
 
 		// Read from .env file if present (dev convenience)
 		v.SetConfigFile(".env")

@@ -22,6 +22,7 @@ type Publisher interface {
 // WalletServiceClient is the gRPC interface to Wallet Service.
 type WalletServiceClient interface {
 	CheckBalance(ctx context.Context, userID string, currency string, amountMinor int64) (bool, int64, error)
+	CheckOrderEligibility(ctx context.Context, userID string) (eligible bool, reason string, err error)
 }
 
 // MarketServiceClient is the gRPC interface to Market Service.
@@ -74,6 +75,7 @@ func NewOrderService(
 // CreateOrder validates and persists a new order.
 // Validation order per the plan:
 // 1. Check rate limit
+// 1b. Check order eligibility (cool-off, self-exclusion)
 // 2. Fetch market + validate active + bounds
 // 3. Validate outcome_index
 // 4. Check user balance
@@ -97,6 +99,19 @@ func (s *OrderService) CreateOrder(ctx context.Context, req *CreateOrderRequest)
 	if err := s.rateLimit.CheckLimit(ctx, userID); err != nil {
 		s.log.Warn("rate limit exceeded", zap.String("user_id", userID.String()), zap.Error(err))
 		return nil, err
+	}
+
+	// Step 1b: Check order eligibility (cool-off, self-exclusion)
+	eligible, reason, err := s.wallet.CheckOrderEligibility(ctx, userID.String())
+	if err != nil {
+		s.log.Warn("wallet service eligibility check error", zap.String("user_id", userID.String()), zap.Error(err))
+		// Log but don't fail — treat as temporary service issue, not user ineligibility
+	} else if !eligible {
+		s.log.Warn("order ineligible",
+			zap.String("user_id", userID.String()),
+			zap.String("reason", reason),
+		)
+		return nil, fmt.Errorf("order ineligible: %s", reason)
 	}
 
 	// Step 2: Validate market exists and is active

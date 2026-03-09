@@ -97,9 +97,48 @@ export const settlementApi = {
     getApiClient().get(`/v1/settlements/${settlementId}`),
 };
 
+/**
+ * Responsible Gambling API
+ */
+export const rgApi = {
+  getDepositSettings: (userId: string) =>
+    getApiClient().get(`/v1/wallets/${userId}/deposit-settings`),
+
+  updateDepositSettings: (userId: string, dailyLimitMinor: number, monthlyLimitMinor?: number) =>
+    getApiClient().put(`/v1/wallets/${userId}/deposit-settings`, {
+      daily_limit_minor: dailyLimitMinor,
+      monthly_limit_minor: monthlyLimitMinor,
+    }),
+
+  getExclusionSettings: (userId: string) =>
+    getApiClient().get(`/v1/wallets/${userId}/exclusion-settings`),
+
+  startCoolOff: (userId: string, durationHours: 24 | 168 | 720) =>
+    getApiClient().post(`/v1/wallets/${userId}/cool-off`, {
+      duration_hours: durationHours,
+    }),
+
+  cancelCoolOff: (userId: string) =>
+    getApiClient().delete(`/v1/wallets/${userId}/cool-off`),
+
+  selfExclude: (userId: string, durationDays?: number) =>
+    getApiClient().post(`/v1/wallets/${userId}/self-exclude`, {
+      duration_days: durationDays || null,
+    }),
+
+  getLossStreakThreshold: (userId: string) =>
+    getApiClient().get(`/v1/wallets/${userId}/loss-streak-threshold`),
+
+  updateLossStreakThreshold: (userId: string, threshold: number) =>
+    getApiClient().put(`/v1/wallets/${userId}/loss-streak-threshold`, {
+      threshold,
+    }),
+};
+
 export default {
   wallet: walletApi,
   market: marketApi,
   settlement: settlementApi,
+  rg: rgApi,
   init: initializeApiClient,
 };

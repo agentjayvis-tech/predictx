@@ -255,6 +255,206 @@ func (r *WalletRepo) GetBalanceAtTime(ctx context.Context, userID, walletID uuid
 	return balance, err
 }
 
+// ─── Responsible Gambling Methods ─────────────────────────────────────────────
+
+// GetDepositSettings returns user's deposit limit settings or creates defaults.
+func (r *WalletRepo) GetDepositSettings(ctx context.Context, userID uuid.UUID) (*domain.DepositSettings, error) {
+	const q = `
+		INSERT INTO user_deposit_settings (user_id)
+		VALUES ($1)
+		ON CONFLICT (user_id) DO NOTHING
+		RETURNING user_id, daily_deposit_limit_minor, monthly_deposit_limit_minor, enabled, created_at, updated_at`
+
+	ds := &domain.DepositSettings{}
+	err := r.db.QueryRow(ctx, q, userID).Scan(
+		&ds.UserID, &ds.DailyDepositLimitMinor, &ds.MonthlyDepositLimitMinor, &ds.Enabled, &ds.CreatedAt, &ds.UpdatedAt,
+	)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Row already existed — fetch it
+		return r.getDepositSettingsExisting(ctx, userID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("wallet_repo: get_deposit_settings: %w", err)
+	}
+	return ds, nil
+}
+
+// getDepositSettingsExisting fetches an existing deposit settings row.
+func (r *WalletRepo) getDepositSettingsExisting(ctx context.Context, userID uuid.UUID) (*domain.DepositSettings, error) {
+	const q = `
+		SELECT user_id, daily_deposit_limit_minor, monthly_deposit_limit_minor, enabled, created_at, updated_at
+		FROM user_deposit_settings
+		WHERE user_id = $1`
+
+	ds := &domain.DepositSettings{}
+	err := r.db.QueryRow(ctx, q, userID).Scan(
+		&ds.UserID, &ds.DailyDepositLimitMinor, &ds.MonthlyDepositLimitMinor, &ds.Enabled, &ds.CreatedAt, &ds.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("wallet_repo: get_deposit_settings_existing: %w", err)
+	}
+	return ds, nil
+}
+
+// UpdateDepositSettings updates user's daily/monthly deposit limits.
+func (r *WalletRepo) UpdateDepositSettings(ctx context.Context, userID uuid.UUID, dailyMinor int64, monthlyMinor *int64) (*domain.DepositSettings, error) {
+	const q = `
+		UPDATE user_deposit_settings
+		SET daily_deposit_limit_minor = $1, monthly_deposit_limit_minor = $2
+		WHERE user_id = $3
+		RETURNING user_id, daily_deposit_limit_minor, monthly_deposit_limit_minor, enabled, created_at, updated_at`
+
+	ds := &domain.DepositSettings{}
+	err := r.db.QueryRow(ctx, q, dailyMinor, monthlyMinor, userID).Scan(
+		&ds.UserID, &ds.DailyDepositLimitMinor, &ds.MonthlyDepositLimitMinor, &ds.Enabled, &ds.CreatedAt, &ds.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("wallet_repo: update_deposit_settings: %w", err)
+	}
+	return ds, nil
+}
+
+// RecordDailyDeposit atomically increments the daily deposit total for today.
+func (r *WalletRepo) RecordDailyDeposit(ctx context.Context, userID uuid.UUID, amountMinor int64) (*domain.DailyDepositTracking, error) {
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+
+	const q = `
+		INSERT INTO daily_deposit_tracking (user_id, tracked_date, total_deposited_minor)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id, tracked_date) DO UPDATE
+		SET total_deposited_minor = total_deposited_minor + $3
+		RETURNING user_id, tracked_date, total_deposited_minor, created_at, updated_at`
+
+	ddt := &domain.DailyDepositTracking{}
+	err := r.db.QueryRow(ctx, q, userID, today, amountMinor).Scan(
+		&ddt.UserID, &ddt.TrackedDate, &ddt.TotalDepositedMinor, &ddt.CreatedAt, &ddt.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("wallet_repo: record_daily_deposit: %w", err)
+	}
+	return ddt, nil
+}
+
+// GetDailyDepositTotal returns the total deposits for a specific date.
+func (r *WalletRepo) GetDailyDepositTotal(ctx context.Context, userID uuid.UUID, date time.Time) (int64, error) {
+	normalizedDate := date.UTC().Truncate(24 * time.Hour)
+
+	var total int64
+	err := r.db.QueryRow(ctx, `
+		SELECT COALESCE(total_deposited_minor, 0)
+		FROM daily_deposit_tracking
+		WHERE user_id = $1 AND tracked_date = $2`,
+		userID, normalizedDate,
+	).Scan(&total)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("wallet_repo: get_daily_deposit_total: %w", err)
+	}
+	return total, nil
+}
+
+// GetExclusionSettings returns user's cool-off and self-exclusion settings or creates defaults.
+func (r *WalletRepo) GetExclusionSettings(ctx context.Context, userID uuid.UUID) (*domain.ExclusionSettings, error) {
+	const q = `
+		INSERT INTO user_exclusion_settings (user_id)
+		VALUES ($1)
+		ON CONFLICT (user_id) DO NOTHING
+		RETURNING user_id, country_code, cool_off_until, cool_off_duration_hours,
+		          cool_off_cancellable, is_self_excluded, self_excluded_at,
+		          self_exclusion_duration_days, created_at, updated_at`
+
+	es := &domain.ExclusionSettings{}
+	err := r.db.QueryRow(ctx, q, userID).Scan(
+		&es.UserID, &es.CountryCode, &es.CoolOffUntil, &es.CoolOffDurationHours,
+		&es.CoolOffCancellable, &es.IsSelfExcluded, &es.SelfExcludedAt,
+		&es.SelfExclusionDurationDays, &es.CreatedAt, &es.UpdatedAt,
+	)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Row already existed — fetch it
+		return r.getExclusionSettingsExisting(ctx, userID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("wallet_repo: get_exclusion_settings: %w", err)
+	}
+	return es, nil
+}
+
+// getExclusionSettingsExisting fetches an existing exclusion settings row.
+func (r *WalletRepo) getExclusionSettingsExisting(ctx context.Context, userID uuid.UUID) (*domain.ExclusionSettings, error) {
+	const q = `
+		SELECT user_id, country_code, cool_off_until, cool_off_duration_hours,
+		       cool_off_cancellable, is_self_excluded, self_excluded_at,
+		       self_exclusion_duration_days, created_at, updated_at
+		FROM user_exclusion_settings
+		WHERE user_id = $1`
+
+	es := &domain.ExclusionSettings{}
+	err := r.db.QueryRow(ctx, q, userID).Scan(
+		&es.UserID, &es.CountryCode, &es.CoolOffUntil, &es.CoolOffDurationHours,
+		&es.CoolOffCancellable, &es.IsSelfExcluded, &es.SelfExcludedAt,
+		&es.SelfExclusionDurationDays, &es.CreatedAt, &es.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("wallet_repo: get_exclusion_settings_existing: %w", err)
+	}
+	return es, nil
+}
+
+// UpdateExclusionSettings updates cool-off and self-exclusion state.
+func (r *WalletRepo) UpdateExclusionSettings(ctx context.Context, userID uuid.UUID, es *domain.ExclusionSettings) (*domain.ExclusionSettings, error) {
+	const q = `
+		UPDATE user_exclusion_settings
+		SET country_code = $1, cool_off_until = $2, cool_off_duration_hours = $3,
+		    cool_off_cancellable = $4, is_self_excluded = $5, self_excluded_at = $6,
+		    self_exclusion_duration_days = $7
+		WHERE user_id = $8
+		RETURNING user_id, country_code, cool_off_until, cool_off_duration_hours,
+		          cool_off_cancellable, is_self_excluded, self_excluded_at,
+		          self_exclusion_duration_days, created_at, updated_at`
+
+	updated := &domain.ExclusionSettings{}
+	err := r.db.QueryRow(ctx, q,
+		es.CountryCode, es.CoolOffUntil, es.CoolOffDurationHours,
+		es.CoolOffCancellable, es.IsSelfExcluded, es.SelfExcludedAt,
+		es.SelfExclusionDurationDays, userID,
+	).Scan(
+		&updated.UserID, &updated.CountryCode, &updated.CoolOffUntil, &updated.CoolOffDurationHours,
+		&updated.CoolOffCancellable, &updated.IsSelfExcluded, &updated.SelfExcludedAt,
+		&updated.SelfExclusionDurationDays, &updated.CreatedAt, &updated.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("wallet_repo: update_exclusion_settings: %w", err)
+	}
+	return updated, nil
+}
+
+// GetCountryRGPolicy returns the RG policy configuration for a specific country.
+func (r *WalletRepo) GetCountryRGPolicy(ctx context.Context, countryCode string) (*domain.CountryRGPolicy, error) {
+	const q = `
+		SELECT country_code, cool_off_cancellable, max_daily_deposit_limit_minor,
+		       max_cool_off_duration_hours, created_at, updated_at
+		FROM country_rg_policy
+		WHERE country_code = $1`
+
+	policy := &domain.CountryRGPolicy{}
+	err := r.db.QueryRow(ctx, q, countryCode).Scan(
+		&policy.CountryCode, &policy.CoolOffCancellable, &policy.MaxDailyDepositLimitMinor,
+		&policy.MaxCoolOffDurationHours, &policy.CreatedAt, &policy.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil  // Country not configured; use global defaults
+	}
+	if err != nil {
+		return nil, fmt.Errorf("wallet_repo: get_country_rg_policy: %w", err)
+	}
+	return policy, nil
+}
+
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 type scanner interface {

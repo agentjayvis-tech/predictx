@@ -12,6 +12,22 @@ service WalletService {
     rpc Debit (DebitRequest) returns (TransactionResponse);
     // Credit increments user balance (e.g. payout, refund, daily reward).
     rpc Credit (CreditRequest) returns (TransactionResponse);
+
+    // Responsible Gambling RPCs
+    // GetDepositSettings returns user's deposit limit configuration.
+    rpc GetDepositSettings (GetDepositSettingsRequest) returns (DepositSettingsResponse);
+    // UpdateDepositSettings updates user's deposit limits.
+    rpc UpdateDepositSettings (UpdateDepositSettingsRequest) returns (DepositSettingsResponse);
+    // GetExclusionSettings returns user's cool-off and self-exclusion configuration.
+    rpc GetExclusionSettings (GetExclusionSettingsRequest) returns (ExclusionSettingsResponse);
+    // StartCoolOff initiates a cool-off period (24h, 7d, 30d).
+    rpc StartCoolOff (StartCoolOffRequest) returns (ExclusionSettingsResponse);
+    // CancelCoolOff cancels an active cool-off (if allowed in user's region).
+    rpc CancelCoolOff (CancelCoolOffRequest) returns (ExclusionSettingsResponse);
+    // SelfExclude initiates self-exclusion (temporary or permanent).
+    rpc SelfExclude (SelfExcludeRequest) returns (ExclusionSettingsResponse);
+    // CheckOrderEligibility checks if user can place an order (not in cool-off or self-excluded).
+    rpc CheckOrderEligibility (CheckOrderEligibilityRequest) returns (CheckOrderEligibilityResponse);
 }
 
 message CheckBalanceRequest {
@@ -51,4 +67,67 @@ message TransactionResponse {
     string transaction_id    = 1;
     int64  new_balance_minor = 2;
     bool   already_processed = 3; // true on idempotency hit (safe to retry)
+}
+
+// Responsible Gambling Messages
+
+message GetDepositSettingsRequest {
+    string user_id = 1;
+}
+
+message DepositSettingsResponse {
+    string user_id                    = 1;
+    int64  daily_deposit_limit_minor  = 2;
+    int64  monthly_deposit_limit_minor = 3; // 0 if not set
+    bool   enabled                    = 4;
+    int64  remaining_daily_budget     = 5; // Informational
+    string created_at                 = 6; // RFC 3339
+    string updated_at                 = 7; // RFC 3339
+}
+
+message UpdateDepositSettingsRequest {
+    string user_id                   = 1;
+    int64  daily_deposit_limit_minor = 2;
+    int64  monthly_deposit_limit_minor = 3; // 0 to unset
+}
+
+message GetExclusionSettingsRequest {
+    string user_id = 1;
+}
+
+message ExclusionSettingsResponse {
+    string user_id                      = 1;
+    string country_code                 = 2; // 'IN', 'NG', 'KE', 'PH', etc.
+    bool   in_cool_off                  = 3; // true if currently in cool-off period
+    int32  cool_off_remaining_hours     = 4; // 0 if not in cool-off
+    int32  cool_off_duration_hours      = 5; // 24, 168, or 720
+    bool   cool_off_cancellable         = 6; // Can user cancel in their region?
+    bool   is_self_excluded             = 7;
+    int32  self_exclusion_remaining_days = 8; // 0 if permanent or not excluded
+    int32  self_exclusion_duration_days = 9; // 0 if permanent
+    string created_at                   = 10; // RFC 3339
+    string updated_at                   = 11; // RFC 3339
+}
+
+message StartCoolOffRequest {
+    string user_id         = 1;
+    int32  duration_hours  = 2; // 24, 168, or 720
+}
+
+message CancelCoolOffRequest {
+    string user_id = 1;
+}
+
+message SelfExcludeRequest {
+    string user_id             = 1;
+    int32  duration_days       = 2; // 0 for permanent
+}
+
+message CheckOrderEligibilityRequest {
+    string user_id = 1;
+}
+
+message CheckOrderEligibilityResponse {
+    bool   eligible = 1;
+    string reason   = 2; // Empty if eligible, error message if not
 }
