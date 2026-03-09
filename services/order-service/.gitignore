@@ -1,0 +1,12 @@
+# Binaries
+/server
+/cmd/server/server
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store

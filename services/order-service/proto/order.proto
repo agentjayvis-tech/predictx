@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package orderservice;
+
+option go_package = "github.com/predictx/order-service/internal/api/grpc/orderpb";
+
+service OrderService {
+    rpc CreateOrder (CreateOrderRequest) returns (OrderResponse);
+    rpc GetOrder (GetOrderRequest) returns (OrderResponse);
+    rpc ListUserOrders (ListUserOrdersRequest) returns (stream OrderResponse);
+    rpc CancelOrder (CancelOrderRequest) returns (OrderResponse);
+    rpc CheckRGLimit (CheckRGLimitRequest) returns (CheckRGLimitResponse);
+}
+
+message CreateOrderRequest {
+    string user_id = 1;                 // UUID of the user placing order
+    string market_id = 2;               // UUID of the market
+    string order_type = 3;              // "buy" or "sell"
+    string time_in_force = 4;           // "ioc" (immediate-or-cancel) or "gtc" (good-till-cancelled)
+    int64 price_minor = 5;              // Bet amount in minor units (e.g., 100 coins)
+    int64 quantity_shares = 6;          // For scalar markets; default 1 for binary
+    string currency = 7;                // "COINS", "NGN", etc. (validated against market currency)
+    int32 outcome_index = 8;            // 0/1 for binary, index for scalar
+    string idempotency_key = 9;         // For idempotent order placement
+}
+
+message OrderResponse {
+    string order_id = 1;
+    string user_id = 2;
+    string market_id = 3;
+    string order_type = 4;
+    string status = 5;
+    int64 price_minor = 6;
+    int64 quantity_shares = 7;
+    string currency = 8;
+    int32 outcome_index = 9;
+    string created_at = 10;             // ISO 8601 timestamp
+    bool already_processed = 11;        // True if idempotency key hit
+}
+
+message GetOrderRequest {
+    string order_id = 1;                // UUID of the order
+}
+
+message ListUserOrdersRequest {
+    string user_id = 1;                 // UUID of the user
+    string status_filter = 2;           // Optional: "pending", "matched", "settled", "cancelled"
+    int32 limit = 3;
+    int32 offset = 4;
+}
+
+message CancelOrderRequest {
+    string order_id = 1;                // UUID of the order
+    string user_id = 2;                 // UUID of the user (must match order owner)
+    string idempotency_key = 3;         // For idempotent cancellation
+}
+
+message CheckRGLimitRequest {
+    string user_id = 1;                 // UUID of the user
+    int64 additional_spend_minor = 2;   // Potential additional spend to check against
+}
+
+message CheckRGLimitResponse {
+    bool within_daily_limit = 1;
+    bool within_weekly_limit = 2;
+    int64 daily_remaining_minor = 3;
+    int64 weekly_remaining_minor = 4;
+}
